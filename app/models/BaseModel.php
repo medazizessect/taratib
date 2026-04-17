@@ -9,6 +9,9 @@ abstract class BaseModel
     public function __construct()
     {
         $this->db = Database::getConnection();
+        if ($this->table === '' || !preg_match('/^[a-z_]+$/', $this->table)) {
+            throw new RuntimeException('Invalid table configuration.');
+        }
     }
 
     public function all(): array
