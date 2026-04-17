@@ -2,7 +2,8 @@
 require_once __DIR__ . '/../app/config/Database.php';
 
 if (PHP_SAPI !== 'cli') {
-    header('Content-Type: text/plain; charset=windows-1256');
+    http_response_code(403);
+    exit('This script can only be run from CLI.' . PHP_EOL);
 }
 
 $xlsx = $argv[1] ?? (__DIR__ . '/../VOIE_Nom_Rues_Arabe_2026.xlsx');

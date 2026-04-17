@@ -15,8 +15,20 @@
     addBtn.addEventListener('click', function () {
       const wrapper = document.createElement('div');
       wrapper.className = 'input-group mb-2';
-      wrapper.innerHTML = '<input type="text" class="form-control" name="membres_comite[]" placeholder="اسم العضو">' +
-        '<button type="button" class="btn btn-outline-danger remove-member">حذف</button>';
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'form-control';
+      input.name = 'membres_comite[]';
+      input.placeholder = 'اسم العضو';
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn-outline-danger remove-member';
+      button.textContent = 'حذف';
+
+      wrapper.appendChild(input);
+      wrapper.appendChild(button);
       list.appendChild(wrapper);
     });
     list.addEventListener('click', function (e) {
