@@ -338,12 +338,7 @@ if (!empty($batiments)) {
     <div class="table-wrap">
         <table>
             <thead>
-                <?php
-                    $isFinalized = (($docs['decision_finale'] ?? null) === 'finalise');
-                    $hasMiddleProgress = isset($docs['proces_verbal']) || isset($docs['izn_khabir']) || isset($docs['retour_rapport']);
-                    $rowStateClass = $isFinalized ? 'row-green' : ($hasMiddleProgress ? 'row-orange' : 'row-red');
-                ?>
-                <tr class="<?= $rowStateClass ?>">
+                <tr>
                     <th>#</th>
                     <th>عدد المحضر</th>
                     <th>المكان</th>
@@ -394,8 +389,11 @@ if (!empty($batiments)) {
 
                     $stepKeys = array_keys(STEPS);
                     $lastKey  = end($stepKeys);
+                    $isFinalized = (($docs['decision_finale'] ?? null) === 'finalise');
+                    $hasMiddleProgress = isset($docs['proces_verbal']) || isset($docs['izn_khabir']) || isset($docs['retour_rapport']);
+                    $rowStateClass = $isFinalized ? 'row-green' : ($hasMiddleProgress ? 'row-orange' : 'row-red');
                 ?>
-                <tr>
+                <tr class="<?= $rowStateClass ?>">
                     <td style="font-weight:700;color:#888;font-size:12px">
                         <?= $i + 1 ?>
                     </td>

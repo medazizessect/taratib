@@ -7,6 +7,8 @@ define('USERS', [
     'viewer'  => ['password' => 'viewer123',  'role' => 'viewer',  'nom' => 'Viewer'],
 ]);
 
+// Set TARATIB_OUTPUT_CHARSET=Windows-1256 on servers that require Windows-1256 output.
+// Keep default UTF-8 for compatibility with standard web deployments.
 define('APP_OUTPUT_CHARSET', getenv('TARATIB_OUTPUT_CHARSET') ?: 'UTF-8');
 ini_set('default_charset', APP_OUTPUT_CHARSET);
 if (!headers_sent()) {

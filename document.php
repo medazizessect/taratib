@@ -89,36 +89,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canEdit) {
         ':statut' => $statut,
     ];
 
-    if ($doc) {
-        $pdo->prepare("
-            UPDATE documents_officiels SET
-                numero_doc=:num, date_doc=:datedoc,
-                lieu=:lieu, proprietaire=:prop,
-                numero_rapport=:nr, date_rapport=:dr,
-                nom_expert=:expert, date_expert=:dex,
-                nom_juge=:juge, date_izn_tribunal=:dizn,
-                description_batiment=:desc,
-                contenu_specifique=:contenu,
-                cin_proprietaire=:cin, degre_confirmation=:degre,
-                directive_ministere=:dir, lieu_id=:lid,
-                date_reunion=:reunion, exploitant_nom=:explt,
-                observations=:obs, statut=:statut
-            WHERE batiment_id=:bid AND type=:type
-        ")->execute($data);
-    } else {
-        $pdo->prepare("
-            INSERT INTO documents_officiels
-                (batiment_id,type,numero_doc,date_doc,lieu,proprietaire,
-                 numero_rapport,date_rapport,nom_expert,date_expert,
-                 nom_juge,date_izn_tribunal,description_batiment,
-                 contenu_specifique,cin_proprietaire,degre_confirmation,
-                 directive_ministere,lieu_id,date_reunion,exploitant_nom,
-                 observations,statut)
-            VALUES
-                (:bid,:type,:num,:datedoc,:lieu,:prop,:nr,:dr,
-                 :expert,:dex,:juge,:dizn,:desc,:contenu,:cin,:degre,
-                 :dir,:lid,:reunion,:explt,:obs,:statut)
-        ")->execute($data);
+    $useTx = ($type === 'proces_verbal' && empty($data[':num']) && !$doc);
+    if ($useTx) {
+        $pdo->beginTransaction();
+        $seq = $pdo->query("
+            SELECT MAX(CAST(SUBSTRING_INDEX(numero_doc,'/',1) AS UNSIGNED))
+            FROM documents_officiels
+            WHERE type='proces_verbal' AND YEAR(created_at)=YEAR(CURDATE())
+            FOR UPDATE
+        ")->fetchColumn();
+        $data[':num'] = ((int)$seq + 1) . '/' . date('y');
+    }
+
+    try {
+        if ($doc) {
+            $pdo->prepare("
+                UPDATE documents_officiels SET
+                    numero_doc=:num, date_doc=:datedoc,
+                    lieu=:lieu, proprietaire=:prop,
+                    numero_rapport=:nr, date_rapport=:dr,
+                    nom_expert=:expert, date_expert=:dex,
+                    nom_juge=:juge, date_izn_tribunal=:dizn,
+                    description_batiment=:desc,
+                    contenu_specifique=:contenu,
+                    cin_proprietaire=:cin, degre_confirmation=:degre,
+                    directive_ministere=:dir, lieu_id=:lid,
+                    date_reunion=:reunion, exploitant_nom=:explt,
+                    observations=:obs, statut=:statut
+                WHERE batiment_id=:bid AND type=:type
+            ")->execute($data);
+        } else {
+            $pdo->prepare("
+                INSERT INTO documents_officiels
+                    (batiment_id,type,numero_doc,date_doc,lieu,proprietaire,
+                     numero_rapport,date_rapport,nom_expert,date_expert,
+                     nom_juge,date_izn_tribunal,description_batiment,
+                     contenu_specifique,cin_proprietaire,degre_confirmation,
+                     directive_ministere,lieu_id,date_reunion,exploitant_nom,
+                     observations,statut)
+                VALUES
+                    (:bid,:type,:num,:datedoc,:lieu,:prop,:nr,:dr,
+                     :expert,:dex,:juge,:dizn,:desc,:contenu,:cin,:degre,
+                     :dir,:lid,:reunion,:explt,:obs,:statut)
+            ")->execute($data);
+        }
+        if ($useTx) $pdo->commit();
+    } catch (Throwable $e) {
+        if ($useTx && $pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
     }
 
     // Recharger
@@ -131,7 +149,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canEdit) {
 $autoNumeroPv = '';
 if ($type === 'proces_verbal') {
     $yy = date('y');
-    $cStmt = $pdo->prepare("SELECT COUNT(*) FROM documents_officiels WHERE type='proces_verbal' AND YEAR(created_at)=YEAR(CURDATE())");
+    $cStmt = $pdo->prepare("
+        SELECT MAX(CAST(SUBSTRING_INDEX(numero_doc,'/',1) AS UNSIGNED))
+        FROM documents_officiels
+        WHERE type='proces_verbal' AND YEAR(created_at)=YEAR(CURDATE())
+    ");
     $cStmt->execute();
     $autoNumeroPv = ((int)$cStmt->fetchColumn() + 1) . '/' . $yy;
 }

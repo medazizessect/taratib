@@ -10,7 +10,7 @@ require 'db.php';
 
 $errors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (empty(trim($_POST['numero_rapport'] ?? ''))) $errors[] = 'ID Bureau d\'Ordre مطلوب';
+    if (empty(trim($_POST['numero_rapport'] ?? ''))) $errors[] = 'ID Bureau d\'ordre مطلوب';
     if (empty($_POST['date_rapport'] ?? '')) $errors[] = 'تاريخ الشكاية مطلوب';
     if (empty($_FILES['reclamation_file']['name'] ?? '')) $errors[] = 'ملف الشكاية (PDF/Scan) مطلوب';
 
