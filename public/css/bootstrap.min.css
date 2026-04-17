@@ -1,0 +1,3 @@
+/* Minimal local bootstrap placeholder; full Bootstrap loaded via CDN in layout */
+:root{--bs-primary:#0d6efd;--bs-body-bg:#fff;--bs-body-color:#212529}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif}
