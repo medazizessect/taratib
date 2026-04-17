@@ -44,7 +44,7 @@
         <div class="col-md-6"><label class="form-label">Date/Heure réunion</label><input type="datetime-local" class="form-control field-highlight" name="date_reunion"></div>
         <div class="col-md-6"><label class="form-label">Degré confirmation</label><select class="form-select field-highlight" name="degre_confirmation"><option value="1">1</option><option value="2">2</option></select></div>
 
-        <div class="col-12"><label class="form-label">Description situation (WYSIWYG simple)</label><textarea class="form-control field-highlight" rows="5" name="description_situation"></textarea></div>
+        <div class="col-12"><label class="form-label">Description situation</label><textarea class="form-control field-highlight" rows="5" name="description_situation"></textarea></div>
         <div class="col-12"><label class="form-label">Directive ministère (optionnel)</label><textarea class="form-control field-highlight" rows="2" name="directive_ministere"></textarea></div>
 
         <div class="col-12">

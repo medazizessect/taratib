@@ -4,6 +4,7 @@ require_once __DIR__ . '/Model.php';
 class Reclamation extends Model
 {
     protected string $table = 'reclamations';
+    protected array $allowedOrderColumns = ['id', 'bureau_ordre_id', 'date_reclamation', 'proprietaire_nom', 'created_at'];
 
     public function create(array $data): bool
     {

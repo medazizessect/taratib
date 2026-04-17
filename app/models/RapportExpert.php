@@ -4,6 +4,7 @@ require_once __DIR__ . '/Model.php';
 class RapportExpert extends Model
 {
     protected string $table = 'rapports_experts';
+    protected array $allowedOrderColumns = ['id', 'date_visite', 'created_at'];
 
     public function create(array $data): bool
     {

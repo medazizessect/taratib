@@ -91,7 +91,7 @@ class Etape2Controller extends BaseController
                 'date_reunion' => $_POST['date_reunion'] ?: null,
                 'statut' => $_POST['statut'] ?? 'brouillon',
             ]);
-            $this->redirect('etape2/show&id=' . $id);
+            $this->redirect('etape2/show', ['id' => $id]);
         }
 
         $lieux = (new Lieu())->all('adresse_libelle ASC');

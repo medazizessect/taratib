@@ -4,6 +4,7 @@ require_once __DIR__ . '/Model.php';
 class ProcesVerbal extends Model
 {
     protected string $table = 'proces_verbaux';
+    protected array $allowedOrderColumns = ['id', 'numero_pv', 'annee', 'date_pv', 'created_at'];
 
     public function nextNumeroForYear(int $year): int
     {

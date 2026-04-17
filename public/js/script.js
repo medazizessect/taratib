@@ -13,7 +13,20 @@
     addMemberBtn.addEventListener('click', function () {
       const item = document.createElement('div');
       item.className = 'input-group mb-2';
-      item.innerHTML = '<input type="text" class="form-control" name="membres_comite[]" placeholder="Nom du membre"><button type="button" class="btn btn-outline-danger remove-member">Supprimer</button>';
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'form-control';
+      input.name = 'membres_comite[]';
+      input.placeholder = 'Nom du membre';
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn-outline-danger remove-member';
+      button.textContent = 'Supprimer';
+
+      item.appendChild(input);
+      item.appendChild(button);
       membersWrap.appendChild(item);
     });
 

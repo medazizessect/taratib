@@ -4,6 +4,7 @@ require_once __DIR__ . '/Model.php';
 class DecisionFinale extends Model
 {
     protected string $table = 'decisions_finales';
+    protected array $allowedOrderColumns = ['id', 'date_decision', 'created_at'];
 
     public function create(array $data): bool
     {

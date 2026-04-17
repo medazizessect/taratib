@@ -45,7 +45,7 @@ $routes = [
 
 if (!isset($routes[$route])) {
     http_response_code(404);
-    echo '404 - Route introuvable';
+    echo '404 - Route introuvable: ' . htmlspecialchars((string) $route, ENT_QUOTES, 'UTF-8');
     exit;
 }
 

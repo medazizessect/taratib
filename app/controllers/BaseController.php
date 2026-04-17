@@ -15,9 +15,10 @@ abstract class BaseController
         include __DIR__ . '/../../resources/views/layouts/app.php';
     }
 
-    protected function redirect(string $route): void
+    protected function redirect(string $route, array $params = []): void
     {
-        header('Location: /index.php?route=' . urlencode($route));
+        $query = array_merge(['route' => $route], $params);
+        header('Location: /index.php?' . http_build_query($query));
         exit;
     }
 }
