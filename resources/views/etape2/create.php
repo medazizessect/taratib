@@ -4,7 +4,7 @@
     <div class="mb-3">
       <img src="/public/images/Logo_commune_Sousse.svg" class="logo-header" alt="Logo commune">
     </div>
-    <form>
+    <form method="post" action="/public/index.php?route=etape2.create">
       <div class="row g-3">
         <div class="col-md-3"><label class="form-label">Numéro</label><input class="form-control" value="1"></div>
         <div class="col-md-3"><label class="form-label">Année</label><input class="form-control" value="26"></div>

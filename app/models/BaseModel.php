@@ -5,11 +5,20 @@ abstract class BaseModel
 {
     protected PDO $db;
     protected string $table;
+    private const ALLOWED_TABLES = [
+        'users',
+        'lieux',
+        'reclamations',
+        'proces_verbaux',
+        'echanges_cour',
+        'rapports_experts',
+        'decisions_finales',
+    ];
 
     public function __construct()
     {
         $this->db = Database::getConnection();
-        if ($this->table === '' || !preg_match('/^[a-z_]+$/', $this->table)) {
+        if ($this->table === '' || !in_array($this->table, self::ALLOWED_TABLES, true)) {
             throw new RuntimeException('Invalid table configuration.');
         }
     }
