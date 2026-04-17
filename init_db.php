@@ -7,17 +7,18 @@ $username = 'root';
 $password = '';
 
 try {
-    $pdo = new PDO("mysql:host=$host;charset=utf8", $username, $password);
+    $pdo = new PDO("mysql:host=$host;charset=utf8mb4", $username, $password);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
     $pdo->exec("CREATE DATABASE IF NOT EXISTS batiments_ruine
-                CHARACTER SET utf8 COLLATE utf8_unicode_ci");
+                CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
     $pdo->exec("USE batiments_ruine");
 
     $pdo->exec("DROP TABLE IF EXISTS documents_officiels");
     $pdo->exec("DROP TABLE IF EXISTS batiments");
     $pdo->exec("DROP TABLE IF EXISTS membres");
     $pdo->exec("DROP TABLE IF EXISTS modeles_documents");
+    $pdo->exec("DROP TABLE IF EXISTS lieux");
 
     // ── Table batiments ──
     $pdo->exec("
@@ -26,6 +27,8 @@ try {
             numero_rapport        VARCHAR(20),
             lieu                  TEXT,
             proprietaire          TEXT,
+            reclamation_file      VARCHAR(255),
+            extraction_auto       TINYINT(1) DEFAULT 0,
             mise_a_jour           VARCHAR(100),
             notification          VARCHAR(100),
             date_rapport          DATE NULL,
@@ -41,7 +44,7 @@ try {
             decision_demolition   TEXT,
             observations          TEXT,
             created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
     // ── Table documents_officiels ──
@@ -51,11 +54,11 @@ try {
             id                    INT AUTO_INCREMENT PRIMARY KEY,
             batiment_id           INT NOT NULL,
             type                  ENUM(
-                                    'turat',
-                                    'izn_tribunal',
-                                    'courrier_expert',
-                                    'evacuation',
-                                    'demolition'
+                                    'reclamation',
+                                    'proces_verbal',
+                                    'izn_khabir',
+                                    'retour_rapport',
+                                    'decision_finale'
                                   ) NOT NULL,
             numero_doc            VARCHAR(50),
             date_doc              DATE NULL,
@@ -69,6 +72,12 @@ try {
             date_izn_tribunal     DATE NULL,
             description_batiment  TEXT,
             contenu_specifique    TEXT,
+            cin_proprietaire      VARCHAR(20),
+            degre_confirmation    INT NULL,
+            directive_ministere   TEXT,
+            lieu_id               INT NULL,
+            date_reunion          DATETIME NULL,
+            exploitant_nom        VARCHAR(200),
             observations          TEXT,
             statut                ENUM('brouillon','finalise') DEFAULT 'brouillon',
             created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -77,7 +86,7 @@ try {
             UNIQUE KEY unique_doc (batiment_id, type),
             FOREIGN KEY (batiment_id)
                 REFERENCES batiments(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
     // ── Table membres ──
@@ -88,7 +97,7 @@ try {
             actif      TINYINT(1) DEFAULT 1,
             ordre      INT DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     $pdo->exec("
         INSERT INTO membres (nom, ordre) VALUES
@@ -104,15 +113,15 @@ try {
             intro      LONGTEXT,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                        ON UPDATE CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     $pdo->prepare("
         INSERT INTO modeles_documents (type, intro) VALUES
-        ('turat',          :t),
-        ('izn_tribunal',   :i),
-        ('courrier_expert',:c),
-        ('evacuation',     :e),
-        ('demolition',     :d)
+        ('reclamation',    :t),
+        ('proces_verbal',  :i),
+        ('izn_khabir',     :c),
+        ('retour_rapport', :e),
+        ('decision_finale',:d)
     ")->execute([
         ':t' => 'بعد الاطلاع على ملف البناية المتداعية للسقوط المتواجدة بالعنوان المذكور أدناه، يتشرف المعهد الوطني للتراث بتقديم إجابته حول الطابع المعماري والتراثي للبناية المذكورة.',
         ':i' => 'الحمد لله وحده. بعد اطلاعنا على المطلب محوله وعلى المؤيدات المرافقة له. وعلى أحكام الفصل 213 من م م م ت. نأذن للخبير العدلي بالقيام بالأعمال المشار اليها بالعريضة، وذلك بعد استدعاء الطرفين كما يجب قانونا وعدم التوقف على من بلغه الاستدعاء ولم يحضر، ووفقا للإجراءات القانونية وتحرير تقرير مفصل في الغرض وتسبق له العارضة في شأن مائتي دينارا (200 د) من أجرته.',
@@ -120,6 +129,51 @@ try {
         ':e' => 'عملا بالمرسوم عدد 9 لسنة 2023 المؤرخ في 08 مارس 2023 والمتعلق بحل المجالس البلدية وخاصة الفصل الثاني منه، ومكتوب السيد وزير الداخلية المؤرخ في 14 مارس 2023، أن الكاتب العام المكلف بمهمة تسيير الشؤون العادية للبلدية، بعد إطلاعه على مجلة الجماعات المحلية الصادرة بالقانون الأساسي عدد 29 لسنة 2018 وخاصة الفصلين 266 و267 منه، وعلى القانون عدد 33 لسنة 2024 المتعلق بالبنايات المتداعية للسقوط، ولدرء خطر محقق وشيك ومؤكد قَرَّر ما يلي:',
         ':d' => 'عملا بالمرسوم عدد 9 لسنة 2023 المؤرخ في 08 مارس 2023 والمتعلق بحل المجالس البلدية وخاصة الفصل الثاني منه، إن الكاتب العام المكلف بمهمة تسيير الشؤون العادية للبلدية، بعد إطلاعه على مجلة الجماعات المحلية وخاصة الفصلين 266 و267، وعلى القانون عدد 33 لسنة 2024 المتعلق بالبنايات المتداعية للسقوط، وعلى تقرير الاختبار النهائي، ولدرء خطر وشيك ومؤكد قرّر ما يلي:',
     ]);
+
+    $pdo->exec("
+        CREATE TABLE lieux (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            adresse_libelle VARCHAR(500) CHARACTER SET utf8mb4,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $xlsxPath = __DIR__ . '/VOIE_Nom_Rues_Arabe_2026.xlsx';
+    if (class_exists('ZipArchive') && file_exists($xlsxPath)) {
+        $zip = new ZipArchive();
+        if ($zip->open($xlsxPath) === true) {
+            $sharedStrings = [];
+            $sharedXml = $zip->getFromName('xl/sharedStrings.xml');
+            if ($sharedXml !== false) {
+                $sharedDoc = @simplexml_load_string($sharedXml);
+                if ($sharedDoc && isset($sharedDoc->si)) {
+                    foreach ($sharedDoc->si as $si) {
+                        $sharedStrings[] = (string)$si->t;
+                    }
+                }
+            }
+
+            $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml');
+            if ($sheetXml !== false) {
+                $sheetDoc = @simplexml_load_string($sheetXml);
+                if ($sheetDoc && isset($sheetDoc->sheetData->row)) {
+                    $insLieu = $pdo->prepare("INSERT INTO lieux (adresse_libelle) VALUES (?)");
+                    foreach ($sheetDoc->sheetData->row as $rowNode) {
+                        $cells = $rowNode->c;
+                        if (!isset($cells[0])) continue;
+                        $c = $cells[0];
+                        $v = (string)$c->v;
+                        $val = ((string)$c['t'] === 's') ? ($sharedStrings[(int)$v] ?? '') : $v;
+                        $val = trim($val);
+                        if ($val !== '' && $val !== 'adresse_libelle') {
+                            $insLieu->execute([$val]);
+                        }
+                    }
+                }
+            }
+            $zip->close();
+        }
+    }
 
     // Données initiales
     $ins = $pdo->prepare("

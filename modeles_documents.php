@@ -4,23 +4,24 @@ ini_set('display_errors', 0);
 require 'db.php';
 
 $types = [
-    'evacuation'      => ['📋 قرار إخلاء فوري',      '#c0392b'],
-    'demolition'      => ['🏚️ قرار هدم',             '#e67e22'],
-    'courrier_expert' => ['📨 مراسلة تكليف خبير',    '#2e6da4'],
-    'izn_tribunal'    => ['⚖️ إذن خبير المحكمة',     '#6f42c1'],
+    'reclamation'    => ['📝 شكاوي',                  '#dc3545'],
+    'proces_verbal'  => ['📋 محضر',                    '#f39c12'],
+    'izn_khabir'     => ['⚖️ اذن تكليف خبير',         '#2e6da4'],
+    'retour_rapport' => ['📨 Retour rapport expert',  '#6f42c1'],
+    'decision_finale'=> ['✅ قرار اخلاء أو هدم',      '#28a745'],
 ];
 
 $msg  = '';
-$type = $_GET['type'] ?? 'evacuation';
-if (!isset($types[$type])) $type = 'evacuation';
+$type = $_GET['type'] ?? 'reclamation';
+if (!isset($types[$type])) $type = 'reclamation';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $pdo->prepare("UPDATE modeles_documents SET contenu = :c WHERE type = :t")
+    $pdo->prepare("UPDATE modeles_documents SET intro = :c WHERE type = :t")
         ->execute([':c' => $_POST['contenu'], ':t' => $type]);
     $msg = 'saved';
 }
 
-$modele = $pdo->prepare("SELECT contenu FROM modeles_documents WHERE type = ?");
+$modele = $pdo->prepare("SELECT intro FROM modeles_documents WHERE type = ?");
 $modele->execute([$type]);
 $modele_contenu = $modele->fetchColumn();
 

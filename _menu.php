@@ -3,12 +3,12 @@ if (!function_exists('isLoggedIn')) require_once 'config.php';
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');
 
 $menuItems = [
-    ['page' => 'index',             'icon' => '🏚️', 'label' => 'البنايات',       'role' => 'viewer'],
-    ['page' => 'ajouter',           'icon' => '➕',  'label' => 'إضافة محضر',    'role' => 'agent'],
-    ['page' => 'membres',           'icon' => '👥',  'label' => 'الأعضاء',        'role' => 'agent'],
-    ['page' => 'modeles_documents', 'icon' => '📝',  'label' => 'نماذج الوثائق', 'role' => 'admin'],
-    ['page' => 'export_excel',      'icon' => '📊',  'label' => 'Excel',          'role' => 'agent'],
-    ['page' => 'export_pdf',        'icon' => '📄',  'label' => 'PDF',            'role' => 'agent'],
+    ['page' => 'index',             'icon' => '🏚️', 'label' => 'البنايات',       'roles' => ['viewer','haifa','khaoula','mohamed','admin']],
+    ['page' => 'ajouter',           'icon' => '➕',  'label' => 'إضافة شكاية',    'roles' => ['haifa','admin']],
+    ['page' => 'membres',           'icon' => '👥',  'label' => 'الأعضاء',        'roles' => ['admin']],
+    ['page' => 'modeles_documents', 'icon' => '📝',  'label' => 'نماذج الوثائق', 'roles' => ['admin']],
+    ['page' => 'export_excel',      'icon' => '📊',  'label' => 'Excel',          'roles' => ['haifa','khaoula','mohamed','admin']],
+    ['page' => 'export_pdf',        'icon' => '📄',  'label' => 'PDF',            'roles' => ['haifa','khaoula','mohamed','admin']],
 ];
 ?>
 
@@ -21,7 +21,7 @@ $menuItems = [
 
     <!-- Logo -->
     <div class="sb-logo">
-        <div class="sb-logo-icon">🏛️</div>
+        <div class="sb-logo-icon"><img src="Logo_commune_Sousse.svg" alt="Logo"></div>
         <div>
             <div style="font-size:14px;font-weight:700">بلدية سوسة</div>
             <div style="font-size:11px;opacity:.6;margin-top:1px">البنايات المتداعية</div>
@@ -39,7 +39,7 @@ $menuItems = [
             <div style="font-size:11px;opacity:.6;margin-top:1px">
                 <?php
                 $r = $_SESSION['user']['role'] ?? '';
-                echo $r==='admin' ? '🔴 مدير' : ($r==='agent' ? '🔵 عون' : '⚪ قارئ');
+                echo roleLabel($r);
                 ?>
             </div>
         </div>
@@ -48,7 +48,8 @@ $menuItems = [
     <!-- Nav -->
     <nav class="sb-nav">
         <?php foreach ($menuItems as $item):
-            if (!hasRole($item['role'])) continue;
+            $currentRole = $_SESSION['user']['role'] ?? 'viewer';
+            if (!in_array($currentRole, $item['roles'], true)) continue;
             $active = ($currentPage === $item['page']);
         ?>
         <a href="<?= $item['page'] ?>.php"
@@ -105,6 +106,13 @@ $menuItems = [
         display: flex; align-items: center;
         justify-content: center; font-size: 20px;
         flex-shrink: 0;
+        overflow:hidden;
+    }
+    .sb-logo-icon img{
+        width:100%;
+        height:100%;
+        object-fit:contain;
+        background:white;
     }
 
     .sb-user {
