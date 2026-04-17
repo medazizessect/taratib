@@ -1,0 +1,10 @@
+:root {
+  --taratib-red: #DC3545;
+  --taratib-orange: #FFC107;
+  --taratib-green: #28A745;
+}
+body { direction: rtl; background: #f8f9fa; }
+.logo-header { width: 56px; height: 56px; object-fit: contain; }
+.step-color-red { border-right: 6px solid var(--taratib-red); }
+.step-color-orange { border-right: 6px solid var(--taratib-orange); }
+.step-color-green { border-right: 6px solid var(--taratib-green); }
