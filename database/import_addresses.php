@@ -45,8 +45,9 @@ $db = Database::getConnection();
 $stmt = $db->prepare('INSERT INTO lieux (adresse_libelle, code) VALUES (:adresse, :code)');
 $count = 0;
 
-foreach ($rows as $idx => $row) {
-    if ((int)$idx === 0) {
+foreach ($rows as $row) {
+    $rowNumber = (int)($row['r'] ?? 0);
+    if ($rowNumber === 1) {
         continue;
     }
 
