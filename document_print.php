@@ -35,12 +35,7 @@ $dizn_fmt = $v['date_izn_tribunal'] ? date('d/m/Y', strtotime($v['date_izn_tribu
         }
         .entete-txt{font-size:11pt;line-height:2}
         .logo-box{text-align:center}
-        .logo-circle{
-            width:65px;height:65px;border-radius:50%;
-            border:2px solid #1a3c5e;
-            display:flex;align-items:center;justify-content:center;
-            font-size:28px;margin:0 auto 4px;
-        }
+        .logo-box img{width:65px;height:65px;object-fit:contain}
         .ref-line{
             display:flex;justify-content:space-between;
             margin-bottom:7mm;font-size:11pt;
@@ -107,7 +102,7 @@ $dizn_fmt = $v['date_izn_tribunal'] ? date('d/m/Y', strtotime($v['date_izn_tribu
         <strong>بلدية سوسة</strong>
     </div>
     <div class="logo-box">
-        <div class="logo-circle">🏛️</div>
+        <img src="Logo_commune_Sousse.svg" alt="Logo">
         <div style="font-size:11pt">بلدية سوسة</div>
     </div>
     <div class="entete-txt" style="text-align:left;direction:ltr">
@@ -154,7 +149,7 @@ $dizn_fmt = $v['date_izn_tribunal'] ? date('d/m/Y', strtotime($v['date_izn_tribu
         <span class="dv"><?= htmlspecialchars($v['nom_expert']) ?> — <?= $dex_fmt ?></span>
     </div>
     <?php endif; ?>
-    <?php if ($type === 'izn_tribunal' && !empty($v['nom_juge'])): ?>
+    <?php if ($type === 'izn_khabir' && !empty($v['nom_juge'])): ?>
     <div class="data-row">
         <span class="dl">القاضي / الوكيل:</span>
         <span class="dv"><?= htmlspecialchars($v['nom_juge']) ?></span>
@@ -180,7 +175,7 @@ $dizn_fmt = $v['date_izn_tribunal'] ? date('d/m/Y', strtotime($v['date_izn_tribu
 <!-- Contenu spécifique -->
 <?php if (!empty($v['contenu_specifique'])): ?>
 <div class="fasl">
-    <?php if (in_array($type, ['evacuation','demolition'])): ?>
+    <?php if ($type === 'decision_finale'): ?>
     <div class="fasl-t">الفصل الأول:</div>
     <?php endif; ?>
     <div class="fasl-b"><?= nl2br(htmlspecialchars($v['contenu_specifique'])) ?></div>
@@ -188,19 +183,10 @@ $dizn_fmt = $v['date_izn_tribunal'] ? date('d/m/Y', strtotime($v['date_izn_tribu
 <?php endif; ?>
 
 <!-- Fassls standards -->
-<?php if ($type === 'evacuation'): ?>
+<?php if ($type === 'decision_finale'): ?>
 <div class="fasl">
     <div class="fasl-t">الفصل الثاني:</div>
     <div class="fasl-b">الكاتب العام لبلدية سوسة ورئيس مركز الشرطة البلدية مكلفان كل فيما يخصه بتنفيذ هذا القرار.</div>
-</div>
-<?php elseif ($type === 'demolition'): ?>
-<div class="fasl">
-    <div class="fasl-t">الفصل الثاني:</div>
-    <div class="fasl-b">يأخذ المقاول جميع الاحتياطات اللازمة عند التنفيذ مع وجوبية إبرام عقد تأمين.</div>
-</div>
-<div class="fasl">
-    <div class="fasl-t">الفصل الثالث:</div>
-    <div class="fasl-b">الكاتب العام لبلدية سوسة مكلف بتنفيذ هذا القرار.</div>
 </div>
 <?php endif; ?>
 
@@ -213,7 +199,7 @@ $dizn_fmt = $v['date_izn_tribunal'] ? date('d/m/Y', strtotime($v['date_izn_tribu
 <?php endif; ?>
 
 <!-- Signature -->
-<?php if (in_array($type, ['evacuation','demolition','courrier_expert','turat'])): ?>
+<?php if (in_array($type, ['decision_finale','retour_rapport','reclamation','proces_verbal'])): ?>
 <div class="signature">
     <div class="sig-block">
         <div class="sig-title">
@@ -223,7 +209,7 @@ $dizn_fmt = $v['date_izn_tribunal'] ? date('d/m/Y', strtotime($v['date_izn_tribu
         <div class="sig-stamp">الختم<br>الرسمي</div>
     </div>
 </div>
-<?php elseif ($type === 'izn_tribunal'): ?>
+<?php elseif ($type === 'izn_khabir'): ?>
 <div style="text-align:center;margin-top:15mm;font-size:12pt;line-height:2">
     سوسة في <?= $dizn_fmt ?><br>
     الوكيل الأول لرئيس المحكمة الابتدائية بسوسة 1<br>

@@ -12,11 +12,11 @@ $type = trim($_GET['type']   ?? '');
 
 // Types valides
 $types_info = [
-    'turat'           => ['🏺 إجابة التراث',       '#17a2b8'],
-    'izn_tribunal'    => ['⚖️ إذن خبير المحكمة',  '#6f42c1'],
-    'courrier_expert' => ['📨 مراسلة تكليف خبير', '#2e6da4'],
-    'evacuation'      => ['📋 قرار إخلاء فوري',   '#c0392b'],
-    'demolition'      => ['🏚️ قرار هدم',          '#e67e22'],
+    'reclamation'    => ['📝 شكاوي (Réclamation)', '#dc3545'],
+    'proces_verbal'  => ['📋 محضر',                '#f39c12'],
+    'izn_khabir'     => ['⚖️ اذن تكليف خبير',      '#2e6da4'],
+    'retour_rapport' => ['📨 Retour rapport expert','#6f42c1'],
+    'decision_finale'=> ['✅ قرار اخلاء أو هدم',   '#28a745'],
 ];
 
 if (!$id || !array_key_exists($type, $types_info)) {
@@ -57,9 +57,10 @@ foreach ($stmtAllDocs->fetchAll(PDO::FETCH_ASSOC) as $d) {
 }
 
 $msg = '';
+$canEdit = canEditStep($type);
 
 // ── Sauvegarde ──
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasRole('agent')) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canEdit) {
     $statut = in_array($_POST['statut'] ?? '', ['brouillon','finalise'])
               ? $_POST['statut'] : 'brouillon';
 
@@ -78,34 +79,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasRole('agent')) {
         ':dizn'   => ($_POST['date_izn_tribunal']        ?? '') ?: null,
         ':desc'   => trim($_POST['description_batiment'] ?? '') ?: null,
         ':contenu'=> trim($_POST['contenu_specifique']   ?? '') ?: null,
+        ':cin'    => trim($_POST['cin_proprietaire']     ?? '') ?: null,
+        ':degre'  => trim($_POST['degre_confirmation']    ?? '') ?: null,
+        ':dir'    => trim($_POST['directive_ministere']   ?? '') ?: null,
+        ':lid'    => ($_POST['lieu_id']                   ?? '') ?: null,
+        ':reunion'=> ($_POST['date_reunion']              ?? '') ?: null,
+        ':explt'  => trim($_POST['exploitant_nom']        ?? '') ?: null,
         ':obs'    => trim($_POST['observations']         ?? '') ?: null,
         ':statut' => $statut,
     ];
 
-    if ($doc) {
-        $pdo->prepare("
-            UPDATE documents_officiels SET
-                numero_doc=:num, date_doc=:datedoc,
-                lieu=:lieu, proprietaire=:prop,
-                numero_rapport=:nr, date_rapport=:dr,
-                nom_expert=:expert, date_expert=:dex,
-                nom_juge=:juge, date_izn_tribunal=:dizn,
-                description_batiment=:desc,
-                contenu_specifique=:contenu,
-                observations=:obs, statut=:statut
-            WHERE batiment_id=:bid AND type=:type
-        ")->execute($data);
-    } else {
-        $pdo->prepare("
-            INSERT INTO documents_officiels
-                (batiment_id,type,numero_doc,date_doc,lieu,proprietaire,
-                 numero_rapport,date_rapport,nom_expert,date_expert,
-                 nom_juge,date_izn_tribunal,description_batiment,
-                 contenu_specifique,observations,statut)
-            VALUES
-                (:bid,:type,:num,:datedoc,:lieu,:prop,:nr,:dr,
-                 :expert,:dex,:juge,:dizn,:desc,:contenu,:obs,:statut)
-        ")->execute($data);
+    $useTx = ($type === 'proces_verbal' && empty($data[':num']) && !$doc);
+    if ($useTx) {
+        $pdo->beginTransaction();
+        $seq = $pdo->query("
+            SELECT MAX(CAST(SUBSTRING_INDEX(numero_doc,'/',1) AS UNSIGNED))
+            FROM documents_officiels
+            WHERE type='proces_verbal' AND YEAR(created_at)=YEAR(CURDATE())
+            FOR UPDATE
+        ")->fetchColumn();
+        $data[':num'] = ((int)$seq + 1) . '/' . date('y');
+    }
+
+    try {
+        if ($doc) {
+            $pdo->prepare("
+                UPDATE documents_officiels SET
+                    numero_doc=:num, date_doc=:datedoc,
+                    lieu=:lieu, proprietaire=:prop,
+                    numero_rapport=:nr, date_rapport=:dr,
+                    nom_expert=:expert, date_expert=:dex,
+                    nom_juge=:juge, date_izn_tribunal=:dizn,
+                    description_batiment=:desc,
+                    contenu_specifique=:contenu,
+                    cin_proprietaire=:cin, degre_confirmation=:degre,
+                    directive_ministere=:dir, lieu_id=:lid,
+                    date_reunion=:reunion, exploitant_nom=:explt,
+                    observations=:obs, statut=:statut
+                WHERE batiment_id=:bid AND type=:type
+            ")->execute($data);
+        } else {
+            $pdo->prepare("
+                INSERT INTO documents_officiels
+                    (batiment_id,type,numero_doc,date_doc,lieu,proprietaire,
+                     numero_rapport,date_rapport,nom_expert,date_expert,
+                     nom_juge,date_izn_tribunal,description_batiment,
+                     contenu_specifique,cin_proprietaire,degre_confirmation,
+                     directive_ministere,lieu_id,date_reunion,exploitant_nom,
+                     observations,statut)
+                VALUES
+                    (:bid,:type,:num,:datedoc,:lieu,:prop,:nr,:dr,
+                     :expert,:dex,:juge,:dizn,:desc,:contenu,:cin,:degre,
+                     :dir,:lid,:reunion,:explt,:obs,:statut)
+            ")->execute($data);
+        }
+        if ($useTx) $pdo->commit();
+    } catch (Throwable $e) {
+        if ($useTx && $pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
     }
 
     // Recharger
@@ -115,8 +146,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasRole('agent')) {
 }
 
 // Valeurs du formulaire
+$autoNumeroPv = '';
+if ($type === 'proces_verbal') {
+    $yy = date('y');
+    $cStmt = $pdo->prepare("
+        SELECT MAX(CAST(SUBSTRING_INDEX(numero_doc,'/',1) AS UNSIGNED))
+        FROM documents_officiels
+        WHERE type='proces_verbal' AND YEAR(created_at)=YEAR(CURDATE())
+    ");
+    $cStmt->execute();
+    $autoNumeroPv = ((int)$cStmt->fetchColumn() + 1) . '/' . $yy;
+}
+
 $v = [
-    'numero_doc'           => $doc['numero_doc']           ?? '',
+    'numero_doc'           => $doc['numero_doc']           ?? $autoNumeroPv,
     'date_doc'             => $doc['date_doc']             ?? '',
     'lieu'                 => $doc['lieu']                 ?? $batiment['lieu']           ?? '',
     'proprietaire'         => $doc['proprietaire']         ?? $batiment['proprietaire']   ?? '',
@@ -128,6 +171,12 @@ $v = [
     'date_izn_tribunal'    => $doc['date_izn_tribunal']    ?? '',
     'description_batiment' => $doc['description_batiment'] ?? '',
     'contenu_specifique'   => $doc['contenu_specifique']   ?? '',
+    'cin_proprietaire'     => $doc['cin_proprietaire']     ?? '',
+    'degre_confirmation'   => $doc['degre_confirmation']   ?? '',
+    'directive_ministere'  => $doc['directive_ministere']  ?? '',
+    'lieu_id'              => $doc['lieu_id']              ?? '',
+    'date_reunion'         => $doc['date_reunion']         ?? '',
+    'exploitant_nom'       => $doc['exploitant_nom']       ?? '',
     'observations'         => $doc['observations']         ?? '',
     'statut'               => $doc['statut']               ?? 'brouillon',
 ];
@@ -135,6 +184,14 @@ $v = [
 $info  = $types_info[$type];
 $color = $info[1];
 $label = $info[0];
+$lieux = [];
+if ($type === 'proces_verbal') {
+    try {
+        $lieux = $pdo->query("SELECT id, adresse_libelle FROM lieux ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        $lieux = [];
+    }
+}
 
 // Mode impression
 if (isset($_GET['print'])) {
@@ -167,6 +224,7 @@ if (isset($_GET['print'])) {
             box-shadow:0 3px 10px rgba(0,0,0,.2);
             position:sticky;top:0;z-index:100;
         }
+        .commune-logo{width:42px;height:42px;object-fit:contain;background:white;border-radius:50%;padding:3px}
         header h1{font-size:18px;font-weight:700}
         header p{font-size:12px;margin-top:3px;opacity:.85}
 
@@ -300,6 +358,7 @@ if (isset($_GET['print'])) {
 <?php include '_menu.php'; ?>
 
 <header>
+    <img src="Logo_commune_Sousse.svg" alt="Logo" class="commune-logo">
     <div>
         <h1><?= htmlspecialchars($label) ?></h1>
         <p>محضر رقم: <?= htmlspecialchars($batiment['numero_rapport']) ?>
@@ -369,6 +428,11 @@ if (isset($_GET['print'])) {
     <?php elseif ($msg === 'brouillon'): ?>
         <div class="alert alert-warning">
             ✏️ تم الحفظ كمسودة — الطباعة غير متاحة حتى تحفظ كنهائي
+        </div>
+    <?php endif; ?>
+    <?php if (!$canEdit): ?>
+        <div class="alert alert-danger">
+            🚫 لديك صلاحية قراءة فقط لهذه المرحلة
         </div>
     <?php endif; ?>
 
@@ -453,6 +517,57 @@ if (isset($_GET['print'])) {
                     <div class="auto-hint">🔄 مُعبَّأ تلقائياً — يمكن تعديله</div>
                 </div>
 
+                <?php if ($type === 'proces_verbal'): ?>
+                <div class="sec-sep full">
+                    <span>🟨 حقول المحضر</span><hr>
+                </div>
+                <div class="fg">
+                    <label>CIN (اختياري)</label>
+                    <input type="text" name="cin_proprietaire"
+                           value="<?= htmlspecialchars($v['cin_proprietaire']) ?>">
+                </div>
+                <div class="fg">
+                    <label>درجة التأكيد</label>
+                    <select name="degre_confirmation">
+                        <option value="">—</option>
+                        <option value="1" <?= $v['degre_confirmation']==='1' ? 'selected' : '' ?>>1</option>
+                        <option value="2" <?= $v['degre_confirmation']==='2' ? 'selected' : '' ?>>2</option>
+                    </select>
+                </div>
+                <div class="fg full">
+                    <label>المكان (عناوين مسبقة)</label>
+                    <select name="lieu_id">
+                        <option value="">— اختر العنوان —</option>
+                        <?php foreach ($lieux as $l): ?>
+                            <option value="<?= (int)$l['id'] ?>" <?= (string)$v['lieu_id']===(string)$l['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($l['adresse_libelle']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="fg">
+                    <label>تاريخ/ساعة الاجتماع</label>
+                    <input type="datetime-local" name="date_reunion"
+                           value="<?= htmlspecialchars($v['date_reunion'] ? date('Y-m-d\TH:i', strtotime($v['date_reunion'])) : '') ?>">
+                </div>
+                <div class="fg">
+                    <label>مستغلة من؟</label>
+                    <select name="exploitant_toggle" onchange="document.getElementById('exp-wrap').style.display=this.value==='oui'?'block':'none'">
+                        <option value="non" <?= empty($v['exploitant_nom']) ? 'selected' : '' ?>>لا</option>
+                        <option value="oui" <?= !empty($v['exploitant_nom']) ? 'selected' : '' ?>>نعم</option>
+                    </select>
+                </div>
+                <div class="fg full" id="exp-wrap" style="<?= empty($v['exploitant_nom']) ? 'display:none' : '' ?>">
+                    <label>المشغول</label>
+                    <input type="text" name="exploitant_nom"
+                           value="<?= htmlspecialchars($v['exploitant_nom']) ?>">
+                </div>
+                <div class="fg full">
+                    <label>توجيه وزارة التجهيز (اختياري)</label>
+                    <textarea name="directive_ministere"><?= htmlspecialchars($v['directive_ministere']) ?></textarea>
+                </div>
+                <?php endif; ?>
+
                 <div class="sec-sep full">
                     <span>🏗️ وصف البناية</span><hr>
                 </div>
@@ -463,7 +578,7 @@ if (isset($_GET['print'])) {
                     ><?= htmlspecialchars($v['description_batiment']) ?></textarea>
                 </div>
 
-                <?php if (in_array($type, ['demolition','courrier_expert','izn_tribunal'])): ?>
+                <?php if (in_array($type, ['izn_khabir','retour_rapport','decision_finale'])): ?>
                 <div class="sec-sep full">
                     <span>🔬 بيانات الخبير</span><hr>
                 </div>
@@ -480,7 +595,7 @@ if (isset($_GET['print'])) {
                 </div>
                 <?php endif; ?>
 
-                <?php if ($type === 'izn_tribunal'): ?>
+                <?php if ($type === 'izn_khabir'): ?>
                 <div class="sec-sep full">
                     <span>⚖️ بيانات المحكمة</span><hr>
                 </div>
@@ -536,16 +651,16 @@ if (isset($_GET['print'])) {
         <!-- ── Actions ── -->
         <div class="btn-row">
             <!-- Brouillon -->
-            <button type="button" class="btn btn-draft"
-                    onclick="saveDoc('brouillon')">
+             <button type="button" class="btn btn-draft" <?= !$canEdit ? 'disabled style="opacity:.6;cursor:not-allowed"' : '' ?>
+                     onclick="saveDoc('brouillon')">
                 💾 حفظ كمسودة
-            </button>
+             </button>
 
             <!-- Final -->
-            <button type="button" class="btn btn-final"
-                    onclick="saveDoc('finalise')">
+             <button type="button" class="btn btn-final" <?= !$canEdit ? 'disabled style="opacity:.6;cursor:not-allowed"' : '' ?>
+                     onclick="saveDoc('finalise')">
                 ✅ حفظ كنهائي
-            </button>
+             </button>
 
             <!-- Impression -->
             <?php if ($v['statut'] === 'finalise'): ?>
@@ -614,41 +729,37 @@ function buildPreview() {
     var obs  = gv('observations');
     var t = '';
 
-    if (docType === 'turat') {
+    if (docType === 'reclamation') {
         t = introText + '\n\n';
         t += 'البناية الكائنة بـ: ' + lieu + '\n';
         t += 'المالك: ' + prop + '\n';
         if (desc) t += '\nوصف البناية:\n' + desc + '\n';
         if (cont) t += '\n' + cont;
-    } else if (docType === 'izn_tribunal') {
+    } else if (docType === 'proces_verbal') {
+        t = 'محضر معاينة عدد ' + nr + '\n\n';
+        t += 'المالك: ' + prop + '\n';
+        if (cont) t += '\n' + cont + '\n';
+        if (desc) t += '\n' + desc + '\n';
+    } else if (docType === 'izn_khabir') {
         t = 'نحن ' + juge + ' الوكيل الأول لرئيس المحكمة الابتدائية بسوسة.\n\n';
         t += introText + '\n\n';
         t += 'نأذن للخبير العدلي "' + exp + '" بالقيام بالأعمال المشار إليها.\n';
         if (cont) t += '\n' + cont + '\n';
         t += '\nسوسة في ' + dizn + '\nالوكيل الأول: ' + juge;
-    } else if (docType === 'courrier_expert') {
+    } else if (docType === 'retour_rapport') {
         t = 'الموضوع: إذن في تكليف مهندس خبير\n\n';
         t += introText + '\n\n';
         t += 'البناية الكائنة بـ: ' + lieu + ' (ملك ' + prop + ')\n';
         if (desc) t += '\nتتكوّن من:\n' + desc + '\n';
         if (cont) t += '\n' + cont + '\n';
         t += '\nالخبير المقترح: ' + exp;
-    } else if (docType === 'evacuation') {
+    } else if (docType === 'decision_finale') {
         t = introText + '\n\n';
         t += 'الفصل الأول: يتم الشروع الفوري في الإخلاء\n';
         if (cont) t += cont + '\n';
         t += '\nالكائن بـ: ' + lieu;
         t += '\nعلى حساب: ' + prop;
         t += '\n\nالفصل الثاني: الكاتب العام مكلف بالتنفيذ.';
-    } else if (docType === 'demolition') {
-        t = introText + '\n';
-        t += 'محضر عدد ' + nr + ' بتاريخ ' + dr + '\n';
-        t += 'تقرير الخبير ' + exp + ' بتاريخ ' + dex + '\n\n';
-        t += 'الفصل الأول: الشروع الفوري في الهدم\n';
-        if (desc) t += desc + '\n';
-        if (cont) t += cont + '\n';
-        t += '\nالعقار الكائن بـ: ' + lieu;
-        t += '\nعلى حساب: ' + prop;
     }
     if (obs) t += '\n\nملاحظات: ' + obs;
     return t;

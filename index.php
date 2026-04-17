@@ -154,6 +154,9 @@ if (!empty($batiments)) {
         tbody tr{transition:background .15s}
         tbody tr:nth-child(even){background:#f8f9fa}
         tbody tr:hover{background:#e8f0fb}
+        tbody tr.row-red td{background:#fdeaea}
+        tbody tr.row-orange td{background:#fff3e0}
+        tbody tr.row-green td{background:#e9f7ef}
         tbody td{
             padding:9px 8px;border:1px solid #e9ecef;
             text-align:center;vertical-align:middle;
@@ -203,11 +206,11 @@ if (!empty($batiments)) {
         }
 
         /* Couleurs par étape */
-        .step-done.s1{background:#17a2b8;color:white}
-        .step-done.s2{background:#6f42c1;color:white}
+        .step-done.s1{background:#dc3545;color:white}
+        .step-done.s2{background:#f39c12;color:white}
         .step-done.s3{background:#2e6da4;color:white}
-        .step-done.s4{background:#c0392b;color:white}
-        .step-done.s5{background:#e67e22;color:white}
+        .step-done.s4{background:#6f42c1;color:white}
+        .step-done.s5{background:#28a745;color:white}
 
         /* ✓ Finalise */
         .step-final::after{
@@ -258,6 +261,7 @@ if (!empty($batiments)) {
 <?php include '_menu.php'; ?>
 
 <header>
+    <img src="Logo_commune_Sousse.svg" alt="Logo" style="width:40px;height:40px;background:white;border-radius:50%;padding:3px">
     <div class="header-title">
         <h1>🏚️ جدول بياني للبنايات المتداعية للسقوط</h1>
         <p>إدارة الشؤون التقنية — بلدية سوسة</p>
@@ -265,9 +269,7 @@ if (!empty($batiments)) {
     <div class="user-badge">
         👤 <?= htmlspecialchars($_SESSION['user']['nom']) ?>
         <span style="opacity:.6;font-size:11px">
-            (<?= $_SESSION['user']['role']==='admin'
-                ? 'مدير'
-                : ($_SESSION['user']['role']==='agent' ? 'عون' : 'قارئ') ?>)
+            (<?= roleLabel($_SESSION['user']['role'] ?? 'viewer') ?>)
         </span>
     </div>
 </header>
@@ -309,7 +311,7 @@ if (!empty($batiments)) {
     <!-- Toolbar -->
     <div class="toolbar">
         <div class="toolbar-left">
-            <?php if (hasRole('agent')): ?>
+            <?php if (canEditStep('reclamation')): ?>
                 <a href="ajouter.php" class="btn btn-success">➕ إضافة محضر</a>
                 <a href="export_excel.php<?= $search!=='' ? '?search='.urlencode($search) : '' ?>"
                    class="btn btn-excel">📊 Excel</a>
@@ -362,7 +364,9 @@ if (!empty($batiments)) {
                         style="padding:40px;color:#999;font-size:15px;text-align:center">
                         <?= $search !== ''
                             ? "🔍 لا توجد نتائج لـ: <strong>".htmlspecialchars($search)."</strong>"
-                            : '📭 لا توجد بيانات — <a href="ajouter.php" style="color:#2e6da4">أضف محضراً</a>' ?>
+                            : (canEditStep('reclamation')
+                                ? '📭 لا توجد بيانات — <a href="ajouter.php" style="color:#2e6da4">أضف محضراً</a>'
+                                : '📭 لا توجد بيانات') ?>
                     </td>
                 </tr>
             <?php else: ?>
@@ -385,8 +389,11 @@ if (!empty($batiments)) {
 
                     $stepKeys = array_keys(STEPS);
                     $lastKey  = end($stepKeys);
+                    $isFinalized = (($docs['decision_finale'] ?? null) === 'finalise');
+                    $hasMiddleProgress = isset($docs['proces_verbal']) || isset($docs['izn_khabir']) || isset($docs['retour_rapport']);
+                    $rowStateClass = $isFinalized ? 'row-green' : ($hasMiddleProgress ? 'row-orange' : 'row-red');
                 ?>
-                <tr>
+                <tr class="<?= $rowStateClass ?>">
                     <td style="font-weight:700;color:#888;font-size:12px">
                         <?= $i + 1 ?>
                     </td>
@@ -474,7 +481,7 @@ if (!empty($batiments)) {
 
                             <!-- Modifier / Supprimer -->
                             <div class="action-top">
-                                <?php if (hasRole('agent')): ?>
+                                <?php if (canEditStep('reclamation')): ?>
                                 <a href="modifier.php?id=<?= $row['id'] ?>"
                                    class="ab ab-edit" title="تعديل">✏️</a>
                                 <?php endif; ?>
@@ -512,12 +519,7 @@ if (!empty($batiments)) {
                                 <?php endif; ?>
 
                                 <?php if (!$isLast): ?>
-                                    <?php if ($type === 'turat'): ?>
-                                        <span class="step-arrow"
-                                              style="color:#17a2b8">·</span>
-                                    <?php else: ?>
-                                        <span class="step-arrow">←</span>
-                                    <?php endif; ?>
+                                    <span class="step-arrow">←</span>
                                 <?php endif; ?>
 
                             <?php endforeach; ?>
@@ -527,7 +529,9 @@ if (!empty($batiments)) {
                             <div style="font-size:9px;color:#bbb;
                                         display:flex;gap:5px;margin-top:2px;
                                         flex-wrap:wrap;justify-content:center">
-                                <span style="color:#17a2b8">· (ف) اختياري</span>
+                                <span style="color:#dc3545">🔴 شكاوي</span>
+                                <span style="color:#f39c12">🟠 مراحل 2-4</span>
+                                <span style="color:#28a745">🟢 قرار نهائي</span>
                                 <span style="color:#ffc107">● مسودة</span>
                                 <span style="color:#28a745">● نهائي</span>
                                 <span>🔒 مقفل</span>

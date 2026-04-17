@@ -46,12 +46,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         .login-logo{text-align:center;margin-bottom:28px}
         .login-logo .icon{
-            width:80px;height:80px;border-radius:50%;
-            background:linear-gradient(135deg,#1a3c5e,#2e6da4);
+            width:80px;height:80px;margin:0 auto 12px;
             display:flex;align-items:center;justify-content:center;
-            font-size:36px;margin:0 auto 12px;
-            box-shadow:0 4px 16px rgba(46,109,164,.4);
         }
+        .login-logo .icon img{max-width:100%;max-height:100%}
         .login-logo h1{font-size:20px;color:#1a3c5e;font-weight:700}
         .login-logo p{font-size:13px;color:#888;margin-top:4px}
 
@@ -96,26 +94,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         .btn-login:hover{opacity:.9;transform:translateY(-1px)}
         .btn-login:active{transform:translateY(0)}
-
-        .users-hint{
-            margin-top:22px;padding:14px;
-            background:#f8f9fa;border-radius:9px;
-            border:1px solid #e9ecef;
-        }
-        .users-hint h3{font-size:12px;color:#888;margin-bottom:10px;
-                        text-align:center;font-weight:600}
-        .user-row{
-            display:flex;justify-content:space-between;align-items:center;
-            padding:5px 8px;border-radius:6px;margin-bottom:4px;
-            font-size:12px;
-        }
-        .user-row:hover{background:#e8f0fb;cursor:pointer}
-        .user-name{font-weight:600;color:#1a3c5e}
-        .user-role{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}
-        .role-admin {background:#dc3545;color:white}
-        .role-agent {background:#2e6da4;color:white}
-        .role-viewer{background:#6c757d;color:white}
-
         .footer-txt{text-align:center;font-size:11px;color:#bbb;margin-top:20px}
     </style>
 </head>
@@ -123,7 +101,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <div class="login-wrap">
     <div class="login-logo">
-        <div class="icon">🏛️</div>
+        <div class="icon">
+            <img src="Logo_commune_Sousse.svg" alt="Logo">
+        </div>
         <h1>بلدية سوسة</h1>
         <p>نظام إدارة البنايات المتداعية للسقوط</p>
     </div>
@@ -154,24 +134,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <button type="submit" class="btn-login">🚀 تسجيل الدخول</button>
     </form>
-
-    <!-- Aide utilisateurs -->
-    <div class="users-hint">
-        <h3>👥 المستخدمون المتاحون</h3>
-        <?php foreach (USERS as $u => $info): ?>
-        <div class="user-row"
-             onclick="document.querySelector('[name=username]').value='<?= $u ?>';
-                      document.querySelector('[name=password]').value='<?= $info['password'] ?>'">
-            <span class="user-name"><?= htmlspecialchars($info['nom']) ?> (<?= $u ?>)</span>
-            <span class="user-role role-<?= $info['role'] ?>">
-                <?= $info['role'] === 'admin' ? 'مدير' : ($info['role'] === 'agent' ? 'عون' : 'قارئ') ?>
-            </span>
-        </div>
-        <?php endforeach; ?>
-        <p style="font-size:10px;color:#bbb;text-align:center;margin-top:6px">
-            انقر على مستخدم للملء التلقائي
-        </p>
-    </div>
 
     <div class="footer-txt">بلدية سوسة &copy; <?= date('Y') ?></div>
 </div>
