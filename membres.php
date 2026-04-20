@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 trim($_POST['nom'] ?? ''),
                 trim($_POST['username'] ?? ''),
                 in_array($_POST['role'] ?? '', ['admin','haifa','khaoula','mohamed'], true) ? $_POST['role'] : 'haifa',
-                trim($_POST['password'] ?? ''),
+                password_hash(trim($_POST['password'] ?? ''), PASSWORD_DEFAULT),
             ]);
     } elseif ($action === 'toggle_user') {
         $pdo->prepare("UPDATE membres SET actif = 1 - actif WHERE id=?")->execute([intval($_POST['id'] ?? 0)]);
@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $params = [trim($_POST['nom'] ?? ''), $_POST['role'] ?? 'haifa'];
         if (trim($_POST['password'] ?? '') !== '') {
             $sql .= ", password=?";
-            $params[] = trim($_POST['password']);
+            $params[] = password_hash(trim($_POST['password']), PASSWORD_DEFAULT);
         }
         $sql .= " WHERE id=?";
         $params[] = intval($_POST['id'] ?? 0);

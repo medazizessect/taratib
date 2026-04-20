@@ -158,13 +158,11 @@ try {
             actif TINYINT(1) DEFAULT 1
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
     ");
-    $pdo->exec("
-        INSERT INTO membres (nom, username, role, password) VALUES
-        ('المدير', 'admin', 'admin', 'admin123'),
-        ('HAIFA', 'haifa', 'haifa', 'haifa123'),
-        ('KHAOULA', 'khaoula', 'khaoula', 'khaoula123'),
-        ('MOHAMED', 'mohamed', 'mohamed', 'mohamed123')
-    ");
+    $insUser = $pdo->prepare("INSERT INTO membres (nom, username, role, password) VALUES (?,?,?,?)");
+    $insUser->execute(['المدير', 'admin', 'admin', password_hash('admin123', PASSWORD_DEFAULT)]);
+    $insUser->execute(['HAIFA', 'haifa', 'haifa', password_hash('haifa123', PASSWORD_DEFAULT)]);
+    $insUser->execute(['KHAOULA', 'khaoula', 'khaoula', password_hash('khaoula123', PASSWORD_DEFAULT)]);
+    $insUser->execute(['MOHAMED', 'mohamed', 'mohamed', password_hash('mohamed123', PASSWORD_DEFAULT)]);
 
     $pdo->exec("
         CREATE TABLE modeles_documents (

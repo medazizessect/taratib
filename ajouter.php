@@ -7,10 +7,23 @@ $errors = [];
 
 function saveUploadedFile($field, $required = false) {
     if (empty($_FILES[$field]['name'])) return $required ? null : '';
+    if (($_FILES[$field]['size'] ?? 0) > 10 * 1024 * 1024) return null;
     if (!is_dir(__DIR__ . '/uploads')) mkdir(__DIR__ . '/uploads', 0775, true);
     $ext = strtolower(pathinfo($_FILES[$field]['name'], PATHINFO_EXTENSION));
-    if (!in_array($ext, ['pdf','jpg','jpeg','png','doc','docx'])) return null;
-    $name = $field . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+    $allowed = ['pdf','jpg','jpeg','png','doc','docx'];
+    if (!in_array($ext, $allowed, true)) return null;
+    $mimeAllowed = [
+        'application/pdf',
+        'image/jpeg',
+        'image/png',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mime = $finfo ? finfo_file($finfo, $_FILES[$field]['tmp_name']) : '';
+    if ($finfo) finfo_close($finfo);
+    if (!in_array($mime, $mimeAllowed, true)) return null;
+    $name = $field . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(16)) . '.' . $ext;
     $rel = 'uploads/' . $name;
     $ok = move_uploaded_file($_FILES[$field]['tmp_name'], __DIR__ . '/' . $rel);
     return $ok ? $rel : null;

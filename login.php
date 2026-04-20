@@ -8,7 +8,11 @@ if (isLoggedIn()) {
 
 $users = DEFAULT_USERS;
 try {
-    $pdoTmp = new PDO("mysql:host=localhost;dbname=batiments_ruine;charset=utf8", 'root', '');
+    $dbHost = getenv('DB_HOST') ?: 'localhost';
+    $dbName = getenv('DB_NAME') ?: 'batiments_ruine';
+    $dbUser = getenv('DB_USER') ?: 'root';
+    $dbPass = getenv('DB_PASSWORD') ?: '';
+    $pdoTmp = new PDO("mysql:host={$dbHost};dbname={$dbName};charset=utf8", $dbUser, $dbPass);
     $pdoTmp->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $hasTable = $pdoTmp->query("SHOW TABLES LIKE 'membres'")->fetchColumn();
     if ($hasTable) {
@@ -25,14 +29,26 @@ try {
         }
     }
 } catch (Throwable $e) {
+    error_log('Login DB fallback activated.');
 }
+$defaultUsername = array_key_first($users);
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
     $password = trim($_POST['password'] ?? '');
 
-    if (isset($users[$username]) && $users[$username]['password'] === $password) {
+    $valid = false;
+    if (isset($users[$username])) {
+        $stored = (string)$users[$username]['password'];
+        if (preg_match('/^\$2y\$/', $stored)) {
+            $valid = password_verify($password, $stored);
+        } else {
+            $valid = hash_equals($stored, $password);
+        }
+    }
+
+    if ($valid) {
         $_SESSION['user'] = [
             'username' => $username,
             'nom'      => $users[$username]['nom'],
@@ -101,11 +117,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php if ($error): ?><div class="error">❌ <?= htmlspecialchars($error) ?></div><?php endif; ?>
 
     <form method="POST">
-        <input type="hidden" name="username" id="username-field" value="<?= htmlspecialchars($_POST['username'] ?? 'haifa') ?>">
+        <input type="hidden" name="username" id="username-field" value="<?= htmlspecialchars($_POST['username'] ?? $defaultUsername) ?>">
 
         <div class="users">
             <?php foreach ($users as $uname => $info): ?>
-                <button type="button" class="u<?= (($uname === ($_POST['username'] ?? 'haifa')) ? ' active' : '') ?>" data-u="<?= htmlspecialchars($uname) ?>">
+                <button type="button" class="u<?= (($uname === ($_POST['username'] ?? $defaultUsername)) ? ' active' : '') ?>" data-u="<?= htmlspecialchars($uname) ?>">
                     <span><?= htmlspecialchars($info['nom']) ?></span>
                     <small><?= roleLabel($info['role']) ?></small>
                 </button>

@@ -72,7 +72,7 @@ tbody td{padding:8px;border:1px solid #e9ecef;font-size:12px;vertical-align:top}
             <?php if (hasStepAccess('step1_reclamation')): ?><a class="btn b-add" href="ajouter.php">➕ إضافة شكاية</a><?php endif; ?>
         </div>
         <div style="display:flex;gap:6px;align-items:center">
-            <form method="GET" class="search"><button>🔍</button><input name="search" value="<?= htmlspecialchars($search) ?>" placeholder="ID bureau d'ordre / مالك"></form>
+            <form method="GET" class="search"><button aria-label="بحث">🔍</button><input name="search" value="<?= htmlspecialchars($search) ?>" placeholder="ID bureau d'ordre / مالك"></form>
             <?php if ($search !== ''): ?><a href="index.php" class="btn b-cancel">✖</a><?php endif; ?>
         </div>
     </div>

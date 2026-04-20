@@ -32,10 +32,23 @@ $doc = $stmt->fetch(PDO::FETCH_ASSOC);
 
 function saveUploadIfAny($field) {
     if (empty($_FILES[$field]['name'])) return '';
+    if (($_FILES[$field]['size'] ?? 0) > 10 * 1024 * 1024) return null;
     if (!is_dir(__DIR__ . '/uploads')) mkdir(__DIR__ . '/uploads', 0775, true);
     $ext = strtolower(pathinfo($_FILES[$field]['name'], PATHINFO_EXTENSION));
-    if (!in_array($ext, ['pdf','jpg','jpeg','png','doc','docx'])) return null;
-    $name = $field . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+    $allowed = ['pdf','jpg','jpeg','png','doc','docx'];
+    if (!in_array($ext, $allowed, true)) return null;
+    $mimeAllowed = [
+        'application/pdf',
+        'image/jpeg',
+        'image/png',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mime = $finfo ? finfo_file($finfo, $_FILES[$field]['tmp_name']) : '';
+    if ($finfo) finfo_close($finfo);
+    if (!in_array($mime, $mimeAllowed, true)) return null;
+    $name = $field . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(16)) . '.' . $ext;
     $rel = 'uploads/' . $name;
     if (!move_uploaded_file($_FILES[$field]['tmp_name'], __DIR__ . '/' . $rel)) return null;
     return $rel;
@@ -212,7 +225,7 @@ if (in_array($type, ['step3_expert_request','step4_expert_report'], true)) {
                 <div><label>CIN (اختياري)</label><input type="text" name="cin" value="<?= htmlspecialchars($doc['cin'] ?? '') ?>"></div>
                 <div><label>مالك</label><input type="text" name="owner_name" value="<?= htmlspecialchars($doc['owner_name'] ?? $case['proprietaire'] ?? '') ?>"></div>
                 <div><label>مستغلة من</label><select id="exploite_by" name="exploite_by"><option value="">--</option><option value="oui" <?= (($doc['exploite_by'] ?? '') === 'oui') ? 'selected' : '' ?>>نعم</option><option value="non" <?= (($doc['exploite_by'] ?? '') === 'non') ? 'selected' : '' ?>>لا</option></select></div>
-                <div id="occupiedWrap"><label>المشغول</label><input type="text" name="occupied_by" value="<?= htmlspecialchars($doc['occupied_by'] ?? '') ?>"></div>
+                <div id="occupiedWrap" style="display:none"><label>المشغول</label><input type="text" name="occupied_by" value="<?= htmlspecialchars($doc['occupied_by'] ?? '') ?>"></div>
                 <div><label>درجة التأكيد</label><input type="text" name="confirmation_degree" value="<?= htmlspecialchars($doc['confirmation_degree'] ?? '') ?>"></div>
                 <div><label>المكان</label><select name="address_id"><option value="">-- اختر عنوانا --</option><?php foreach($addresses as $a): ?><option value="<?= $a['id'] ?>" <?= ((int)($doc['address_id'] ?? 0) === (int)$a['id']) ? 'selected' : '' ?>><?= htmlspecialchars($a['libelle']) ?></option><?php endforeach; ?></select></div>
                 <div><label>حالة المحضر</label><select name="pv_state_id"><option value="">--</option><?php foreach($pvStates as $s): ?><option value="<?= $s['id'] ?>" <?= ((int)($doc['pv_state_id'] ?? 0) === (int)$s['id']) ? 'selected' : '' ?>><?= htmlspecialchars($s['libelle']) ?></option><?php endforeach; ?></select></div>
@@ -220,8 +233,8 @@ if (in_array($type, ['step3_expert_request','step4_expert_report'], true)) {
             <?php endif; ?>
 
             <?php if ($type === 'step3_expert_request'): ?>
-                <div><label>ID bureau d'ordre</label><input type="text" name="subject" value="<?= htmlspecialchars($doc['subject'] ?? $case['bureau_ordre_id']) ?>"></div>
-                <div><label>الموضوع</label><input type="text" name="administration" value="<?= htmlspecialchars($doc['administration'] ?? '') ?>"></div>
+                <div><label>الموضوع</label><input type="text" name="subject" value="<?= htmlspecialchars($doc['subject'] ?? '') ?>"></div>
+                <div><label>الإدارة</label><input type="text" name="administration" value="<?= htmlspecialchars($doc['administration'] ?? '') ?>"></div>
                 <div><label>اتجاه</label><select name="direction_io"><option value="sader" <?= (($doc['direction_io'] ?? '') === 'sader') ? 'selected' : '' ?>>صادر</option><option value="wared" <?= (($doc['direction_io'] ?? '') === 'wared') ? 'selected' : '' ?>>وارد</option></select></div>
                 <div><label>تسمية الخبير بعد رجوع المحكمة</label><input type="text" name="expert_name" value="<?= htmlspecialchars($doc['expert_name'] ?? '') ?>"></div>
             <?php endif; ?>
