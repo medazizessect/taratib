@@ -2,183 +2,214 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-$host     = 'localhost';
+$host = 'localhost';
 $username = 'root';
 $password = '';
+
+function readArabicAddressesFromXlsx($path) {
+    if (!is_file($path) || !class_exists('ZipArchive')) return [];
+    $zip = new ZipArchive();
+    if ($zip->open($path) !== true) return [];
+    $xml = $zip->getFromName('xl/worksheets/sheet.xml');
+    $zip->close();
+    if (!$xml) return [];
+
+    $sx = @simplexml_load_string($xml);
+    if (!$sx) return [];
+    $sx->registerXPathNamespace('a', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
+
+    $labels = [];
+    foreach ($sx->xpath('//a:sheetData/a:row') as $ri => $row) {
+        if ($ri === 0) continue;
+        $cells = $row->xpath('a:c');
+        $nomAr = '';
+        foreach ($cells as $cell) {
+            $ref = (string)$cell['r'];
+            if (preg_match('/^E\d+$/', $ref)) {
+                if ((string)$cell['t'] === 'inlineStr') {
+                    $nomAr = trim((string)($cell->is->t ?? ''));
+                } else {
+                    $nomAr = trim((string)($cell->v ?? ''));
+                }
+                break;
+            }
+        }
+        if ($nomAr !== '' && mb_strlen($nomAr) > 2) $labels[$nomAr] = true;
+    }
+    return array_keys($labels);
+}
 
 try {
     $pdo = new PDO("mysql:host=$host;charset=utf8", $username, $password);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-    $pdo->exec("CREATE DATABASE IF NOT EXISTS batiments_ruine
-                CHARACTER SET utf8 COLLATE utf8_unicode_ci");
+    $pdo->exec("CREATE DATABASE IF NOT EXISTS batiments_ruine CHARACTER SET utf8 COLLATE utf8_unicode_ci");
     $pdo->exec("USE batiments_ruine");
 
+    $pdo->exec("DROP TABLE IF EXISTS correspondences");
     $pdo->exec("DROP TABLE IF EXISTS documents_officiels");
     $pdo->exec("DROP TABLE IF EXISTS batiments");
+    $pdo->exec("DROP TABLE IF EXISTS adresses");
+    $pdo->exec("DROP TABLE IF EXISTS pv_states");
     $pdo->exec("DROP TABLE IF EXISTS membres");
     $pdo->exec("DROP TABLE IF EXISTS modeles_documents");
 
-    // ── Table batiments ──
     $pdo->exec("
         CREATE TABLE batiments (
-            id                    INT AUTO_INCREMENT PRIMARY KEY,
-            numero_rapport        VARCHAR(20),
-            lieu                  TEXT,
-            proprietaire          TEXT,
-            mise_a_jour           VARCHAR(100),
-            notification          VARCHAR(100),
-            date_rapport          DATE NULL,
-            exploite_oui          TINYINT(1) DEFAULT 0,
-            exploite_non          TINYINT(1) DEFAULT 0,
-            commission            TEXT,
-            date_envoi_tratiib    DATE NULL,
-            date_envoi_wiz        DATE NULL,
-            date_envoi_turat      DATE NULL,
-            date_envoi_juridique  DATE NULL,
-            date_expert           DATE NULL,
-            decision_evacuation   TEXT,
-            decision_demolition   TEXT,
-            observations          TEXT,
-            created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
-    ");
-
-    // ── Table documents_officiels ──
-    // Ordre: turat(fac) → izn → courrier → evacuation → demolition
-    $pdo->exec("
-        CREATE TABLE documents_officiels (
-            id                    INT AUTO_INCREMENT PRIMARY KEY,
-            batiment_id           INT NOT NULL,
-            type                  ENUM(
-                                    'turat',
-                                    'izn_tribunal',
-                                    'courrier_expert',
-                                    'evacuation',
-                                    'demolition'
-                                  ) NOT NULL,
-            numero_doc            VARCHAR(50),
-            date_doc              DATE NULL,
-            lieu                  TEXT,
-            proprietaire          TEXT,
-            numero_rapport        VARCHAR(20),
-            date_rapport          DATE NULL,
-            nom_expert            VARCHAR(150),
-            date_expert           DATE NULL,
-            nom_juge              VARCHAR(150),
-            date_izn_tribunal     DATE NULL,
-            description_batiment  TEXT,
-            contenu_specifique    TEXT,
-            observations          TEXT,
-            statut                ENUM('brouillon','finalise') DEFAULT 'brouillon',
-            created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                                  ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_doc (batiment_id, type),
-            FOREIGN KEY (batiment_id)
-                REFERENCES batiments(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
-    ");
-
-    // ── Table membres ──
-    $pdo->exec("
-        CREATE TABLE membres (
-            id         INT AUTO_INCREMENT PRIMARY KEY,
-            nom        VARCHAR(150) NOT NULL,
-            actif      TINYINT(1) DEFAULT 1,
-            ordre      INT DEFAULT 0,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            bureau_ordre_id VARCHAR(60) NOT NULL,
+            date_reclamation DATE NULL,
+            proprietaire VARCHAR(255) NULL,
+            reclamation_scan_path VARCHAR(255) NULL,
+            notification_pending TINYINT(1) DEFAULT 0,
+            numero_rapport VARCHAR(20) NULL,
+            lieu TEXT NULL,
+            date_rapport DATE NULL,
+            mise_a_jour VARCHAR(100) NULL,
+            notification VARCHAR(100) NULL,
+            exploite_oui TINYINT(1) DEFAULT 0,
+            exploite_non TINYINT(1) DEFAULT 0,
+            commission TEXT NULL,
+            date_envoi_tratiib DATE NULL,
+            date_envoi_wiz DATE NULL,
+            date_envoi_turat DATE NULL,
+            date_envoi_juridique DATE NULL,
+            date_expert DATE NULL,
+            decision_evacuation TEXT NULL,
+            decision_demolition TEXT NULL,
+            observations TEXT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
     ");
+
     $pdo->exec("
-        INSERT INTO membres (nom, ordre) VALUES
-        ('سنية',1),('هيفاء',2),('محمد كاري',3),
-        ('محمد إسماعيل',4),('رضا مصباح',5),('غازي عبودة',6)
+        CREATE TABLE adresses (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            libelle VARCHAR(255) NOT NULL UNIQUE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
     ");
 
-    // ── Table modeles_documents ──
+    $pdo->exec("
+        CREATE TABLE pv_states (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            libelle VARCHAR(120) NOT NULL UNIQUE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE documents_officiels (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            batiment_id INT NOT NULL,
+            type ENUM('step2_pv','step3_expert_request','step4_expert_report','step5_decision') NOT NULL,
+            preceding_document_id INT NULL,
+            statut ENUM('brouillon','finalise') DEFAULT 'brouillon',
+            numero_doc VARCHAR(50) NULL,
+            date_doc DATE NULL,
+            cin VARCHAR(30) NULL,
+            owner_name VARCHAR(255) NULL,
+            exploite_by ENUM('oui','non') NULL,
+            occupied_by VARCHAR(255) NULL,
+            confirmation_degree VARCHAR(80) NULL,
+            address_id INT NULL,
+            pv_state_id INT NULL,
+            forward_to_ministry TINYINT(1) DEFAULT 0,
+            subject VARCHAR(255) NULL,
+            administration VARCHAR(120) NULL,
+            direction_io ENUM('sader','wared') NULL,
+            expert_name VARCHAR(150) NULL,
+            report_type ENUM('initial','final') NULL,
+            heritage_needed TINYINT(1) DEFAULT 0,
+            heritage_direction ENUM('sader','wared') NULL,
+            appointment_date DATE NULL,
+            decision_type ENUM('evacuation','demolition') NULL,
+            attachment_path VARCHAR(255) NULL,
+            observations TEXT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_doc (batiment_id, type),
+            FOREIGN KEY (batiment_id) REFERENCES batiments(id) ON DELETE CASCADE,
+            FOREIGN KEY (preceding_document_id) REFERENCES documents_officiels(id) ON DELETE SET NULL,
+            FOREIGN KEY (address_id) REFERENCES adresses(id) ON DELETE SET NULL,
+            FOREIGN KEY (pv_state_id) REFERENCES pv_states(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE correspondences (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            batiment_id INT NOT NULL,
+            step_type ENUM('step3_expert_request','step4_expert_report') NOT NULL,
+            bureau_ordre_id VARCHAR(60) NOT NULL,
+            subject VARCHAR(255) NOT NULL,
+            administration VARCHAR(120) NOT NULL,
+            direction_io ENUM('sader','wared') NOT NULL,
+            attachment_path VARCHAR(255) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (batiment_id) REFERENCES batiments(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE membres (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            nom VARCHAR(120) NOT NULL,
+            username VARCHAR(80) NOT NULL UNIQUE,
+            role ENUM('admin','haifa','khaoula','mohamed') NOT NULL,
+            password VARCHAR(120) NOT NULL,
+            actif TINYINT(1) DEFAULT 1
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
+    ");
+    $pdo->exec("
+        INSERT INTO membres (nom, username, role, password) VALUES
+        ('المدير', 'admin', 'admin', 'admin123'),
+        ('HAIFA', 'haifa', 'haifa', 'haifa123'),
+        ('KHAOULA', 'khaoula', 'khaoula', 'khaoula123'),
+        ('MOHAMED', 'mohamed', 'mohamed', 'mohamed123')
+    ");
+
     $pdo->exec("
         CREATE TABLE modeles_documents (
-            id         INT AUTO_INCREMENT PRIMARY KEY,
-            type       VARCHAR(50) NOT NULL UNIQUE,
-            intro      LONGTEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                       ON UPDATE CURRENT_TIMESTAMP
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            type VARCHAR(50) NOT NULL UNIQUE,
+            intro LONGTEXT,
+            contenu LONGTEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
     ");
     $pdo->prepare("
-        INSERT INTO modeles_documents (type, intro) VALUES
-        ('turat',          :t),
-        ('izn_tribunal',   :i),
-        ('courrier_expert',:c),
-        ('evacuation',     :e),
-        ('demolition',     :d)
+        INSERT INTO modeles_documents (type, intro, contenu) VALUES
+        ('step2_pv', :s2, :s2),
+        ('step3_expert_request', :s3, :s3),
+        ('step4_expert_report', :s4, :s4),
+        ('step5_decision', :s5, :s5)
     ")->execute([
-        ':t' => 'بعد الاطلاع على ملف البناية المتداعية للسقوط المتواجدة بالعنوان المذكور أدناه، يتشرف المعهد الوطني للتراث بتقديم إجابته حول الطابع المعماري والتراثي للبناية المذكورة.',
-        ':i' => 'الحمد لله وحده. بعد اطلاعنا على المطلب محوله وعلى المؤيدات المرافقة له. وعلى أحكام الفصل 213 من م م م ت. نأذن للخبير العدلي بالقيام بالأعمال المشار اليها بالعريضة، وذلك بعد استدعاء الطرفين كما يجب قانونا وعدم التوقف على من بلغه الاستدعاء ولم يحضر، ووفقا للإجراءات القانونية وتحرير تقرير مفصل في الغرض وتسبق له العارضة في شأن مائتي دينارا (200 د) من أجرته.',
-        ':c' => 'وبعد، نفيد الجناب أنه تنفيذا لمقتضيات القانون عدد 33 لسنة 2024 المؤرخ في 28 جوان 2024 المتعلق بالبنايات المتداعية للسقوط، أجرت اللجنة الفنية المنصوص عليها صلب الفصل 6 من القانون المذكور معاينة ميدانية للبناء المتواجد بالعنوان المذكور أدناه. لـذا، المرجو من الجناب التفضّل بالإذن بتكليف مهندس خبير اختصاص الخرسانة المسلحة والهياكل الحاملة ليتولى في أجل أقصاه 10 أيام إعداد تقرير أولي وتقريره النهائي في أجل أقصاه شهر.',
-        ':e' => 'عملا بالمرسوم عدد 9 لسنة 2023 المؤرخ في 08 مارس 2023 والمتعلق بحل المجالس البلدية وخاصة الفصل الثاني منه، ومكتوب السيد وزير الداخلية المؤرخ في 14 مارس 2023، أن الكاتب العام المكلف بمهمة تسيير الشؤون العادية للبلدية، بعد إطلاعه على مجلة الجماعات المحلية الصادرة بالقانون الأساسي عدد 29 لسنة 2018 وخاصة الفصلين 266 و267 منه، وعلى القانون عدد 33 لسنة 2024 المتعلق بالبنايات المتداعية للسقوط، ولدرء خطر محقق وشيك ومؤكد قَرَّر ما يلي:',
-        ':d' => 'عملا بالمرسوم عدد 9 لسنة 2023 المؤرخ في 08 مارس 2023 والمتعلق بحل المجالس البلدية وخاصة الفصل الثاني منه، إن الكاتب العام المكلف بمهمة تسيير الشؤون العادية للبلدية، بعد إطلاعه على مجلة الجماعات المحلية وخاصة الفصلين 266 و267، وعلى القانون عدد 33 لسنة 2024 المتعلق بالبنايات المتداعية للسقوط، وعلى تقرير الاختبار النهائي، ولدرء خطر وشيك ومؤكد قرّر ما يلي:',
+        ':s2' => 'محضر معاينة للبناية المتداعية للسقوط.',
+        ':s3' => 'مراسلة المحكمة/الإدارة لتكليف خبير.',
+        ':s4' => 'رجوع تقرير الخبير وتحديد موعد التوجه.',
+        ':s5' => 'قرار نهائي: إخلاء أو هدم.',
     ]);
 
-    // Données initiales
-    $ins = $pdo->prepare("
-        INSERT INTO batiments
-            (numero_rapport,lieu,proprietaire,date_rapport,
-             exploite_oui,exploite_non,commission,
-             date_envoi_juridique,date_expert,
-             decision_demolition,observations)
-        VALUES(:nr,:lieu,:prop,:dr,:eoui,:enon,:com,:dej,:dex,:ddem,:obs)
-    ");
-    $data = [
-        ['nr'=>'24/1','lieu'=>'نهج أرناست كونساي- حيّ قابادجي',
-         'prop'=>'ورثة الصكلي','dr'=>'2024-10-29','eoui'=>1,'enon'=>0,
-         'com'=>'هيفاء / محمد كاري / محمد إسماعيل / رضا مصباح / غازي عبودة',
-         'dej'=>null,'dex'=>'2025-01-06','ddem'=>null,
-         'obs'=>'تقرير اختبار الخبير: هدم كامل البناية'],
-        ['nr'=>'24/2','lieu'=>'نهج سيدي محفوظ عدد 27 المدينة العتيقة',
-         'prop'=>'أحمد بن محمد','dr'=>'2024-11-15','eoui'=>1,'enon'=>0,
-         'com'=>'سنية / هيفاء / محمد كاري / محمد إسماعيل / رضا مصباح / غازي عبودة',
-         'dej'=>null,'dex'=>null,'ddem'=>'13251/615','obs'=>'هدم البناية في أقرب الآجال'],
-        ['nr'=>'24/3','lieu'=>'المركب التجاري سوسة بلاص بشارع الحبيب بورقيبة',
-         'prop'=>null,'dr'=>'2024-11-15','eoui'=>1,'enon'=>0,
-         'com'=>'سنية / هيفاء / محمد كاري / محمد إسماعيل / رضا مصباح / غازي عبودة',
-         'dej'=>null,'dex'=>null,'ddem'=>'14258/615','obs'=>null],
-        ['nr'=>'24/4','lieu'=>'مطعم السلفدار شارع الحبيب بورقيبة',
-         'prop'=>'فتحي بوهلال','dr'=>'2024-11-15','eoui'=>1,'enon'=>0,
-         'com'=>'سنية / هيفاء / محمد كاري / محمد إسماعيل / رضا مصباح / غازي عبودة',
-         'dej'=>null,'dex'=>null,'ddem'=>null,'obs'=>null],
-        ['nr'=>'24/5','lieu'=>'بناية متداعية للسقوط بحي الصفايا',
-         'prop'=>'رمزي باصو / سنية البقلوطي','dr'=>'2024-11-15','eoui'=>1,'enon'=>0,
-         'com'=>'سنية / محمد كاري / محمد إسماعيل / رضا مصباح / غازي عبودة',
-         'dej'=>null,'dex'=>'2025-03-27','ddem'=>null,'obs'=>'هدم كامل البناية'],
-        ['nr'=>'24/6','lieu'=>'بناية متداعية للسقوط في نهج حفوز تروكاديرو',
-         'prop'=>'منية بن يوسف / سلمى الخشين','dr'=>'2024-11-15','eoui'=>1,'enon'=>0,
-         'com'=>'سنية / هيفاء / محمد كاري / محمد إسماعيل / رضا مصباح / غازي عبودة',
-         'dej'=>null,'dex'=>'2025-03-27','ddem'=>null,'obs'=>'الترميم الثقيل أو الهدم الكلي'],
-    ];
-    foreach ($data as $row) $ins->execute($row);
+    $states = ['مسودة', 'نهائي', 'قيد المعالجة'];
+    $insState = $pdo->prepare("INSERT INTO pv_states (libelle) VALUES (?)");
+    foreach ($states as $st) $insState->execute([$st]);
 
-    echo "<!DOCTYPE html><html lang='ar' dir='rtl'>
-    <head><meta charset='UTF-8'><title>تهيئة</title>
-    <style>body{font-family:Arial;background:#f0f2f5;display:flex;
-    justify-content:center;align-items:center;height:100vh;margin:0}
-    .box{background:white;padding:40px 50px;border-radius:14px;text-align:center;
-    box-shadow:0 4px 20px rgba(0,0,0,.12)}h2{color:#28a745;margin-bottom:10px}
-    p{color:#666;font-size:14px;margin:5px 0}
-    a{display:inline-block;margin-top:20px;background:#1a3c5e;color:white;
-    padding:12px 28px;border-radius:8px;text-decoration:none;font-size:16px}
-    </style></head><body><div class='box'>
-    <h2>✅ تم إنشاء قاعدة البيانات بنجاح!</h2>
-    <p>✔ جدول البنايات: 6 سجلات</p>
-    <p>✔ جدول الأعضاء: 6 أعضاء</p>
-    <p>✔ نماذج الوثائق: 5 نماذج</p>
-    <p style='color:#17a2b8'>✔ ترتيب المراحل:</p>
-    <p>🏺 التراث (اختياري) ← ⚖️ إذن ← 📨 خبير ← 📋 إخلاء ← 🏚️ هدم</p>
-    <a href='index.php'>🚀 الذهاب إلى التطبيق</a>
-    </div></body></html>";
+    $addresses = readArabicAddressesFromXlsx(__DIR__ . '/VOIE_Nom_Rues_Arabe_2026.xlsx');
+    $insAdr = $pdo->prepare("INSERT IGNORE INTO adresses (libelle) VALUES (?)");
+    foreach ($addresses as $a) $insAdr->execute([$a]);
+    if (empty($addresses)) {
+        foreach (['نهج الحبيب بورقيبة','نهج الجمهورية','حي الرياض'] as $fallback) {
+            $insAdr->execute([$fallback]);
+        }
+    }
 
+    echo "<!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'><title>تهيئة</title>
+    <style>body{font-family:Arial;background:#f0f2f5;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+    .b{background:#fff;padding:35px 42px;border-radius:14px;box-shadow:0 4px 20px rgba(0,0,0,.12);text-align:center}
+    a{display:inline-block;margin-top:15px;padding:10px 20px;background:#1a3c5e;color:#fff;text-decoration:none;border-radius:8px}</style>
+    </head><body><div class='b'><h2>✅ تم تحديث قاعدة البيانات</h2>
+    <p>خطوات جديدة + أدوار + عناوين + حالات محضر</p>
+    <p>عدد العناوين: ".(int)$pdo->query("SELECT COUNT(*) FROM adresses")->fetchColumn()."</p>
+    <a href='index.php'>الدخول للتطبيق</a></div></body></html>";
 } catch (PDOException $e) {
-    die("<div style='font-family:Arial;color:red;padding:20px'>❌ خطأ: ".$e->getMessage()."</div>");
+    die("<div style='font-family:Arial;color:red;padding:20px'>❌ ".$e->getMessage()."</div>");
 }
 ?>

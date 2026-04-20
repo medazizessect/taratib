@@ -1,149 +1,170 @@
 <?php
-error_reporting(0);
-ini_set('display_errors', 0);
-
 require 'config.php';
 requireLogin();
 require 'db.php';
 require '_steps_config.php';
 
-$id   = intval($_GET['id']   ?? 0);
-$type = trim($_GET['type']   ?? '');
+$id = intval($_GET['id'] ?? 0);
+$type = trim($_GET['type'] ?? '');
+if (!$id || !isset(STEPS[$type]) || $type === 'step1_reclamation') { header("Location: index.php"); exit; }
+requireStepAccess($type);
 
-// Types valides
-$types_info = [
-    'turat'           => ['🏺 إجابة التراث',       '#17a2b8'],
-    'izn_tribunal'    => ['⚖️ إذن خبير المحكمة',  '#6f42c1'],
-    'courrier_expert' => ['📨 مراسلة تكليف خبير', '#2e6da4'],
-    'evacuation'      => ['📋 قرار إخلاء فوري',   '#c0392b'],
-    'demolition'      => ['🏚️ قرار هدم',          '#e67e22'],
-];
+$bq = $pdo->prepare("SELECT * FROM batiments WHERE id=?");
+$bq->execute([$id]);
+$case = $bq->fetch(PDO::FETCH_ASSOC);
+if (!$case) { header("Location: index.php"); exit; }
 
-if (!$id || !array_key_exists($type, $types_info)) {
-    header("Location: index.php");
-    exit;
-}
-
-// Charger le bâtiment
-$stmtB = $pdo->prepare("SELECT * FROM batiments WHERE id = ?");
-$stmtB->execute([$id]);
-$batiment = $stmtB->fetch(PDO::FETCH_ASSOC);
-if (!$batiment) {
-    header("Location: index.php");
-    exit;
-}
-
-// Charger le document existant
-$stmtD = $pdo->prepare("
-    SELECT * FROM documents_officiels
-    WHERE batiment_id = ? AND type = ?
-");
-$stmtD->execute([$id, $type]);
-$doc = $stmtD->fetch(PDO::FETCH_ASSOC);
-
-// Charger l'intro du modèle
-$stmtM = $pdo->prepare("SELECT intro FROM modeles_documents WHERE type = ?");
-$stmtM->execute([$type]);
-$intro = $stmtM->fetchColumn() ?: '';
-
-// Charger docs existants pour breadcrumb
-$stmtAllDocs = $pdo->prepare("
-    SELECT type, statut FROM documents_officiels WHERE batiment_id = ?
-");
-$stmtAllDocs->execute([$id]);
-$allDocsBc = [];
-foreach ($stmtAllDocs->fetchAll(PDO::FETCH_ASSOC) as $d) {
-    $allDocsBc[$d['type']] = $d['statut'];
-}
-
-$msg = '';
-
-// ── Sauvegarde ──
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasRole('agent')) {
-    $statut = in_array($_POST['statut'] ?? '', ['brouillon','finalise'])
-              ? $_POST['statut'] : 'brouillon';
-
-    $data = [
-        ':bid'    => $id,
-        ':type'   => $type,
-        ':num'    => trim($_POST['numero_doc']           ?? '') ?: null,
-        ':datedoc'=> ($_POST['date_doc']                 ?? '') ?: null,
-        ':lieu'   => trim($_POST['lieu']                 ?? '') ?: null,
-        ':prop'   => trim($_POST['proprietaire']         ?? '') ?: null,
-        ':nr'     => trim($_POST['numero_rapport']       ?? '') ?: null,
-        ':dr'     => ($_POST['date_rapport']             ?? '') ?: null,
-        ':expert' => trim($_POST['nom_expert']           ?? '') ?: null,
-        ':dex'    => ($_POST['date_expert']              ?? '') ?: null,
-        ':juge'   => trim($_POST['nom_juge']             ?? '') ?: null,
-        ':dizn'   => ($_POST['date_izn_tribunal']        ?? '') ?: null,
-        ':desc'   => trim($_POST['description_batiment'] ?? '') ?: null,
-        ':contenu'=> trim($_POST['contenu_specifique']   ?? '') ?: null,
-        ':obs'    => trim($_POST['observations']         ?? '') ?: null,
-        ':statut' => $statut,
-    ];
-
-    if ($doc) {
-        $pdo->prepare("
-            UPDATE documents_officiels SET
-                numero_doc=:num, date_doc=:datedoc,
-                lieu=:lieu, proprietaire=:prop,
-                numero_rapport=:nr, date_rapport=:dr,
-                nom_expert=:expert, date_expert=:dex,
-                nom_juge=:juge, date_izn_tribunal=:dizn,
-                description_batiment=:desc,
-                contenu_specifique=:contenu,
-                observations=:obs, statut=:statut
-            WHERE batiment_id=:bid AND type=:type
-        ")->execute($data);
+$cfg = STEPS[$type];
+if (!empty($cfg['requires'])) {
+    if ($cfg['requires'] === 'step1_reclamation') {
+        if (empty($case['bureau_ordre_id'])) die('المرحلة 1 غير مكتملة');
     } else {
-        $pdo->prepare("
-            INSERT INTO documents_officiels
-                (batiment_id,type,numero_doc,date_doc,lieu,proprietaire,
-                 numero_rapport,date_rapport,nom_expert,date_expert,
-                 nom_juge,date_izn_tribunal,description_batiment,
-                 contenu_specifique,observations,statut)
-            VALUES
-                (:bid,:type,:num,:datedoc,:lieu,:prop,:nr,:dr,
-                 :expert,:dex,:juge,:dizn,:desc,:contenu,:obs,:statut)
-        ")->execute($data);
+        $rq = $pdo->prepare("SELECT id FROM documents_officiels WHERE batiment_id=? AND type=?");
+        $rq->execute([$id, $cfg['requires']]);
+        $requiredDocId = $rq->fetchColumn();
+        if (!$requiredDocId) die('المرحلة السابقة غير مكتملة');
     }
-
-    // Recharger
-    $stmtD->execute([$id, $type]);
-    $doc = $stmtD->fetch(PDO::FETCH_ASSOC);
-    $msg = $statut;
 }
 
-// Valeurs du formulaire
-$v = [
-    'numero_doc'           => $doc['numero_doc']           ?? '',
-    'date_doc'             => $doc['date_doc']             ?? '',
-    'lieu'                 => $doc['lieu']                 ?? $batiment['lieu']           ?? '',
-    'proprietaire'         => $doc['proprietaire']         ?? $batiment['proprietaire']   ?? '',
-    'numero_rapport'       => $doc['numero_rapport']       ?? $batiment['numero_rapport'] ?? '',
-    'date_rapport'         => $doc['date_rapport']         ?? $batiment['date_rapport']   ?? '',
-    'nom_expert'           => $doc['nom_expert']           ?? '',
-    'date_expert'          => $doc['date_expert']          ?? $batiment['date_expert']    ?? '',
-    'nom_juge'             => $doc['nom_juge']             ?? '',
-    'date_izn_tribunal'    => $doc['date_izn_tribunal']    ?? '',
-    'description_batiment' => $doc['description_batiment'] ?? '',
-    'contenu_specifique'   => $doc['contenu_specifique']   ?? '',
-    'observations'         => $doc['observations']         ?? '',
-    'statut'               => $doc['statut']               ?? 'brouillon',
-];
+$stmt = $pdo->prepare("SELECT * FROM documents_officiels WHERE batiment_id=? AND type=?");
+$stmt->execute([$id, $type]);
+$doc = $stmt->fetch(PDO::FETCH_ASSOC);
 
-$info  = $types_info[$type];
-$color = $info[1];
-$label = $info[0];
+function saveUploadIfAny($field) {
+    if (empty($_FILES[$field]['name'])) return '';
+    if (!is_dir(__DIR__ . '/uploads')) mkdir(__DIR__ . '/uploads', 0775, true);
+    $ext = strtolower(pathinfo($_FILES[$field]['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['pdf','jpg','jpeg','png','doc','docx'])) return null;
+    $name = $field . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+    $rel = 'uploads/' . $name;
+    if (!move_uploaded_file($_FILES[$field]['tmp_name'], __DIR__ . '/' . $rel)) return null;
+    return $rel;
+}
 
-// Mode impression
-if (isset($_GET['print'])) {
-    if ($v['statut'] !== 'finalise') {
-        header("Location: document.php?id=$id&type=$type&err=notfinal");
+function nextPvNumber($pdo) {
+    $yy = date('y');
+    $stmt = $pdo->prepare("SELECT numero_doc FROM documents_officiels WHERE type='step2_pv' AND numero_doc LIKE ?");
+    $stmt->execute(["%/$yy"]);
+    $max = 0;
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $num) {
+        if (preg_match('/^(\d+)\/\d{2}$/', (string)$num, $m)) $max = max($max, (int)$m[1]);
+    }
+    return ($max + 1) . '/' . $yy;
+}
+
+$addresses = $pdo->query("SELECT id, libelle FROM adresses ORDER BY libelle ASC LIMIT 5000")->fetchAll(PDO::FETCH_ASSOC);
+$pvStates = $pdo->query("SELECT id, libelle FROM pv_states ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+$msg = '';
+$errors = [];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['add_correspondence']) && in_array($type, ['step3_expert_request','step4_expert_report'], true)) {
+        $corrFile = saveUploadIfAny('corr_attachment');
+        $pdo->prepare("
+            INSERT INTO correspondences
+            (batiment_id,step_type,bureau_ordre_id,subject,administration,direction_io,attachment_path)
+            VALUES(?,?,?,?,?,?,?)
+        ")->execute([
+            $id, $type,
+            trim($_POST['corr_bureau'] ?? ''),
+            trim($_POST['corr_subject'] ?? ''),
+            trim($_POST['corr_admin'] ?? ''),
+            ($_POST['corr_direction'] ?? 'sader') === 'wared' ? 'wared' : 'sader',
+            $corrFile ?: null
+        ]);
+        header("Location: document.php?id=$id&type=$type&corr=1");
         exit;
     }
+
+    $attachment = saveUploadIfAny('attachment');
+    if ($attachment === null) $errors[] = "صيغة الملف غير مدعومة";
+
+    $statut = ($_POST['statut'] ?? 'brouillon') === 'finalise' ? 'finalise' : 'brouillon';
+    $numeroDoc = trim($_POST['numero_doc'] ?? '');
+    if ($type === 'step2_pv' && $numeroDoc === '') $numeroDoc = nextPvNumber($pdo);
+
+    if ($type === 'step2_pv' && empty($doc['attachment_path']) && !$attachment) {
+        $errors[] = "نسخة المحضر الممسوحة أو القابلة للطباعة مطلوبة";
+    }
+    if ($type === 'step2_pv' && ($_POST['exploite_by'] ?? '') === 'oui' && trim($_POST['occupied_by'] ?? '') === '') {
+        $errors[] = "حقل «المشغول» إجباري عند اختيار مستغلة من = نعم";
+    }
+
+    if (empty($errors)) {
+        $preceding = null;
+        if (!empty($cfg['requires']) && $cfg['requires'] !== 'step1_reclamation') {
+            $x = $pdo->prepare("SELECT id FROM documents_officiels WHERE batiment_id=? AND type=?");
+            $x->execute([$id, $cfg['requires']]);
+            $preceding = $x->fetchColumn() ?: null;
+        }
+
+        $payload = [
+            ':bid' => $id, ':type' => $type, ':statut' => $statut, ':numero_doc' => ($numeroDoc ?: null),
+            ':date_doc' => (($_POST['date_doc'] ?? '') ?: null), ':cin' => trim($_POST['cin'] ?? '') ?: null,
+            ':owner_name' => trim($_POST['owner_name'] ?? '') ?: null,
+            ':exploite_by' => in_array($_POST['exploite_by'] ?? '', ['oui','non'], true) ? $_POST['exploite_by'] : null,
+            ':occupied_by' => trim($_POST['occupied_by'] ?? '') ?: null,
+            ':confirmation_degree' => trim($_POST['confirmation_degree'] ?? '') ?: null,
+            ':address_id' => (($_POST['address_id'] ?? '') !== '' ? intval($_POST['address_id']) : null),
+            ':pv_state_id' => (($_POST['pv_state_id'] ?? '') !== '' ? intval($_POST['pv_state_id']) : null),
+            ':forward_to_ministry' => !empty($_POST['forward_to_ministry']) ? 1 : 0,
+            ':subject' => trim($_POST['subject'] ?? '') ?: null,
+            ':administration' => trim($_POST['administration'] ?? '') ?: null,
+            ':direction_io' => in_array($_POST['direction_io'] ?? '', ['sader','wared'], true) ? $_POST['direction_io'] : null,
+            ':expert_name' => trim($_POST['expert_name'] ?? '') ?: null,
+            ':report_type' => in_array($_POST['report_type'] ?? '', ['initial','final'], true) ? $_POST['report_type'] : null,
+            ':heritage_needed' => !empty($_POST['heritage_needed']) ? 1 : 0,
+            ':heritage_direction' => in_array($_POST['heritage_direction'] ?? '', ['sader','wared'], true) ? $_POST['heritage_direction'] : null,
+            ':appointment_date' => (($_POST['appointment_date'] ?? '') ?: null),
+            ':decision_type' => in_array($_POST['decision_type'] ?? '', ['evacuation','demolition'], true) ? $_POST['decision_type'] : null,
+            ':attachment_path' => $attachment ?: ($doc['attachment_path'] ?? null),
+            ':observations' => trim($_POST['observations'] ?? '') ?: null,
+            ':preceding' => $preceding,
+        ];
+
+        if ($doc) {
+            $sql = "UPDATE documents_officiels SET
+                preceding_document_id=:preceding, statut=:statut, numero_doc=:numero_doc, date_doc=:date_doc,
+                cin=:cin, owner_name=:owner_name, exploite_by=:exploite_by, occupied_by=:occupied_by,
+                confirmation_degree=:confirmation_degree, address_id=:address_id, pv_state_id=:pv_state_id,
+                forward_to_ministry=:forward_to_ministry, subject=:subject, administration=:administration,
+                direction_io=:direction_io, expert_name=:expert_name, report_type=:report_type,
+                heritage_needed=:heritage_needed, heritage_direction=:heritage_direction,
+                appointment_date=:appointment_date, decision_type=:decision_type, attachment_path=:attachment_path,
+                observations=:observations WHERE batiment_id=:bid AND type=:type";
+        } else {
+            $sql = "INSERT INTO documents_officiels
+                (batiment_id,type,preceding_document_id,statut,numero_doc,date_doc,cin,owner_name,exploite_by,occupied_by,
+                confirmation_degree,address_id,pv_state_id,forward_to_ministry,subject,administration,direction_io,
+                expert_name,report_type,heritage_needed,heritage_direction,appointment_date,decision_type,attachment_path,observations)
+                VALUES(:bid,:type,:preceding,:statut,:numero_doc,:date_doc,:cin,:owner_name,:exploite_by,:occupied_by,
+                :confirmation_degree,:address_id,:pv_state_id,:forward_to_ministry,:subject,:administration,:direction_io,
+                :expert_name,:report_type,:heritage_needed,:heritage_direction,:appointment_date,:decision_type,:attachment_path,:observations)";
+        }
+        $pdo->prepare($sql)->execute($payload);
+        header("Location: document.php?id=$id&type=$type&saved=1");
+        exit;
+    }
+}
+
+$stmt->execute([$id, $type]);
+$doc = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+if (isset($_GET['print'])) {
+    if (($doc['statut'] ?? '') !== 'finalise') {
+        header("Location: document.php?id=$id&type=$type");
+        exit;
+    }
+    $v = $doc;
+    $label = $cfg['label'];
     include 'document_print.php';
     exit;
+}
+$corr = [];
+if (in_array($type, ['step3_expert_request','step4_expert_report'], true)) {
+    $c = $pdo->prepare("SELECT * FROM correspondences WHERE batiment_id=? AND step_type=? ORDER BY id DESC");
+    $c->execute([$id, $type]);
+    $corr = $c->fetchAll(PDO::FETCH_ASSOC);
 }
 ?>
 <!DOCTYPE html>
@@ -151,525 +172,110 @@ if (isset($_GET['print'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($label) ?> — <?= htmlspecialchars($batiment['numero_rapport']) ?></title>
+    <title><?= htmlspecialchars($cfg['label']) ?></title>
     <style>
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{
-            font-family:'Segoe UI',Arial,sans-serif;
-            background:#f0f2f5;direction:rtl;color:#333;
-            min-height:100vh;
-        }
-
-        header{
-            background:linear-gradient(135deg,<?= $color ?>,<?= $color ?>bb);
-            color:white;padding:15px 25px;
-            display:flex;align-items:center;justify-content:space-between;
-            box-shadow:0 3px 10px rgba(0,0,0,.2);
-            position:sticky;top:0;z-index:100;
-        }
-        header h1{font-size:18px;font-weight:700}
-        header p{font-size:12px;margin-top:3px;opacity:.85}
-
-        .wrap{max-width:900px;margin:22px auto;padding:0 15px}
-
-        /* Breadcrumb */
-        .breadcrumb{
-            display:flex;align-items:center;gap:0;
-            margin-bottom:18px;background:white;
-            border-radius:10px;padding:10px 14px;
-            box-shadow:0 2px 8px rgba(0,0,0,.07);
-            overflow-x:auto;flex-wrap:nowrap;
-        }
-        .bc-step{
-            display:inline-flex;align-items:center;gap:5px;
-            padding:5px 12px;border-radius:7px;
-            font-size:12px;font-weight:600;white-space:nowrap;
-            text-decoration:none;transition:opacity .2s;
-        }
-        .bc-step.active{color:white}
-        .bc-step.done  {color:white;opacity:.75}
-        .bc-step.todo  {color:#aaa;background:#f5f5f5}
-        .bc-arrow{color:#ccc;font-size:14px;padding:0 3px;flex-shrink:0}
-
-        /* Back */
-        .back{
-            display:inline-flex;align-items:center;gap:6px;
-            margin-bottom:14px;color:<?= $color ?>;
-            text-decoration:none;font-size:14px;font-weight:600;
-        }
-        .back:hover{text-decoration:underline}
-
-        /* Alert */
-        .alert{padding:11px 16px;border-radius:8px;
-               margin-bottom:14px;font-size:14px}
-        .alert-success{background:#d4edda;color:#155724;border:1px solid #c3e6cb}
-        .alert-warning{background:#fff3cd;color:#856404;border:1px solid #ffeeba}
-        .alert-danger {background:#f8d7da;color:#721c24;border:1px solid #f5c6cb}
-
-        /* Cards */
-        .card{
-            background:white;border-radius:12px;padding:22px;
-            box-shadow:0 3px 12px rgba(0,0,0,.08);margin-bottom:16px;
-        }
-        .card-title{
-            font-size:15px;font-weight:bold;color:#1a3c5e;
-            margin-bottom:16px;padding-bottom:10px;
-            border-bottom:2px solid #e8f0fb;
-            display:flex;align-items:center;gap:8px;
-        }
-
-        /* Grid */
-        .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-        .fg{display:flex;flex-direction:column;gap:5px}
-        .fg.full{grid-column:1/-1}
-        label{font-size:12px;font-weight:700;color:#555}
-
-        input[type=text],input[type=date],textarea,select{
-            padding:9px 12px;border:2px solid #e9ecef;
-            border-radius:8px;font-size:13px;font-family:inherit;
-            width:100%;transition:border .2s,box-shadow .2s;background:#fafafa;
-        }
-        input:focus,textarea:focus,select:focus{
-            outline:none;border-color:<?= $color ?>;
-            box-shadow:0 0 0 3px <?= $color ?>22;background:white;
-        }
-        textarea{resize:vertical;min-height:85px;line-height:1.7}
-
-        /* Auto-filled */
-        .field-auto{background:#e8f4fd !important;border-color:#bee5eb !important;color:#0c5460}
-        .auto-hint{font-size:10px;color:#2e6da4;margin-top:2px}
-
-        /* Section sep */
-        .sec-sep{
-            grid-column:1/-1;display:flex;align-items:center;gap:10px;
-            margin:6px 0 2px;
-        }
-        .sec-sep span{
-            background:<?= $color ?>;color:white;padding:3px 12px;
-            border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;
-        }
-        .sec-sep hr{flex:1;border:none;border-top:2px solid #f0f0f0}
-
-        /* Statut */
-        .statut-wrap{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-        .statut-badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700}
-        .s-brouillon{background:#fff3cd;color:#856404}
-        .s-finalise {background:#d4edda;color:#155724}
-
-        /* Aperçu */
-        .preview-card{
-            background:#fffef5;border:2px dashed #ffc107;
-            border-radius:10px;padding:18px;display:none;margin-top:10px;
-        }
-        .preview-card.show{display:block}
-        .preview-content{
-            font-family:'Times New Roman',serif;
-            font-size:12pt;line-height:2;direction:rtl;
-            text-align:justify;white-space:pre-wrap;
-        }
-
-        /* Boutons */
-        .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
-        .btn{
-            padding:10px 20px;border:none;border-radius:8px;
-            cursor:pointer;font-size:14px;font-family:inherit;
-            display:inline-flex;align-items:center;gap:6px;
-            font-weight:600;transition:opacity .2s,transform .1s;
-            text-decoration:none;
-        }
-        .btn:hover{opacity:.85;transform:translateY(-1px)}
-        .btn-draft {background:#ffc107;color:#333}
-        .btn-final {background:#28a745;color:white}
-        .btn-print {background:<?= $color ?>;color:white}
-        .btn-print-locked{background:#dee2e6;color:#aaa;cursor:not-allowed}
-        .btn-back  {background:#6c757d;color:white}
-
-        /* Toast */
-        #toast{
-            display:none;position:fixed;bottom:24px;right:24px;
-            background:#333;color:white;padding:14px 22px;
-            border-radius:10px;font-size:14px;z-index:9999;
-            box-shadow:0 4px 16px rgba(0,0,0,.3);direction:rtl;
-        }
-
-        @media(max-width:600px){.grid{grid-template-columns:1fr}}
+        *{box-sizing:border-box} body{font-family:Segoe UI,Arial;background:#f0f2f5;direction:rtl;margin:0}
+        .wrap{max-width:980px;margin:20px auto;padding:0 15px} .card{background:#fff;border-radius:12px;padding:20px;margin-bottom:14px;box-shadow:0 3px 11px rgba(0,0,0,.08)}
+        .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px} .full{grid-column:1/-1}
+        label{font-size:12px;color:#555;font-weight:700;display:block;margin-bottom:4px}
+        input,select,textarea{width:100%;padding:9px 10px;border:2px solid #e9ecef;border-radius:8px;font-family:inherit}
+        textarea{min-height:80px;resize:vertical} input:focus,select:focus,textarea:focus{outline:none;border-color:#2e6da4}
+        .btn{padding:10px 14px;border:none;border-radius:8px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+        .b1{background:#ffc107}.b2{background:#28a745;color:#fff}.b3{background:#2e6da4;color:#fff}.b4{background:#6c757d;color:#fff}
+        .ok{background:#d4edda;border:1px solid #c3e6cb;padding:10px;border-radius:8px;margin-bottom:10px}
+        .err{background:#f8d7da;border:1px solid #f5c6cb;padding:10px;border-radius:8px;margin-bottom:10px}
+        .io-sader{background:#fff3cd;color:#856404;padding:2px 8px;border-radius:12px;font-size:11px}
+        .io-wared{background:#d4edda;color:#155724;padding:2px 8px;border-radius:12px;font-size:11px}
+        @media(max-width:700px){.grid{grid-template-columns:1fr}}
     </style>
 </head>
 <body>
-
 <?php include '_menu.php'; ?>
-
-<header>
-    <div>
-        <h1><?= htmlspecialchars($label) ?></h1>
-        <p>محضر رقم: <?= htmlspecialchars($batiment['numero_rapport']) ?>
-           — <?= htmlspecialchars(mb_substr($batiment['lieu'] ?? '', 0, 50)) ?></p>
-    </div>
-    <div style="font-size:13px;opacity:.85">
-        <?php
-        $s = $v['statut'];
-        echo $s === 'finalise'
-            ? '<span style="background:rgba(40,167,69,.3);padding:4px 12px;border-radius:20px">✅ نهائي</span>'
-            : '<span style="background:rgba(255,193,7,.3);padding:4px 12px;border-radius:20px">✏️ مسودة</span>';
-        ?>
-    </div>
-</header>
-
 <div class="wrap">
+    <a href="modifier.php?id=<?= $id ?>" class="btn b4">↩️ رجوع للملف</a>
+    <div class="card">
+        <h3 style="margin-top:0"><?= $cfg['icon'] ?> <?= htmlspecialchars($cfg['label']) ?></h3>
+        <p style="color:#666;font-size:12px">ID bureau d'ordre: <?= htmlspecialchars($case['bureau_ordre_id']) ?></p>
+    </div>
 
-    <a href="modifier.php?id=<?= $id ?>" class="back">↩️ رجوع للمحضر</a>
+    <?php if (!empty($_GET['saved'])): ?><div class="ok">✅ تم الحفظ</div><?php endif; ?>
+    <?php if (!empty($_GET['corr'])): ?><div class="ok">✅ تمت إضافة المراسلة</div><?php endif; ?>
+    <?php if ($errors): ?><div class="err"><?php foreach ($errors as $e) echo '• '.htmlspecialchars($e).'<br>'; ?></div><?php endif; ?>
 
-    <!-- Breadcrumb -->
-    <div class="breadcrumb">
-        <?php
-        $stepsArr  = array_keys(STEPS);
-        $lastStepK = end($stepsArr);
-        foreach (STEPS as $st => $scfg):
-            $stStatut  = $allDocsBc[$st] ?? null;
-            $stExists  = ($stStatut !== null);
-            $isActive  = ($st === $type);
-            $stColor   = $scfg['color'];
+    <form method="POST" enctype="multipart/form-data" class="card">
+        <div class="grid">
+            <div><label>رقم الوثيقة</label><input type="text" name="numero_doc" value="<?= htmlspecialchars($doc['numero_doc'] ?? '') ?>"></div>
+            <div><label>تاريخ الوثيقة</label><input type="date" name="date_doc" value="<?= htmlspecialchars($doc['date_doc'] ?? '') ?>"></div>
+            <div><label>الحالة</label><select name="statut"><option value="brouillon" <?= (($doc['statut'] ?? '') === 'brouillon') ? 'selected' : '' ?>>مسودة</option><option value="finalise" <?= (($doc['statut'] ?? '') === 'finalise') ? 'selected' : '' ?>>نهائي</option></select></div>
 
-            if ($isActive) {
-                $cls   = 'active';
-                $style = "background:{$stColor}";
-            } elseif ($stExists) {
-                $cls   = 'done';
-                $style = "background:{$stColor}";
-            } else {
-                $cls   = 'todo';
-                $style = '';
-            }
-        ?>
-            <a href="document.php?id=<?= $id ?>&type=<?= $st ?>"
-               class="bc-step <?= $cls ?>"
-               style="<?= $style ?>">
-                <?= $scfg['icon'] ?> <?= $scfg['label'] ?>
-                <?php if ($stExists && !$isActive): ?> ✓<?php endif; ?>
-                <?php if ($scfg['optional']): ?>
-                    <span style="font-size:10px;opacity:.7">(ف)</span>
-                <?php endif; ?>
-            </a>
-            <?php if ($st !== $lastStepK): ?>
-                <span class="bc-arrow">←</span>
+            <?php if ($type === 'step2_pv'): ?>
+                <div><label>CIN (اختياري)</label><input type="text" name="cin" value="<?= htmlspecialchars($doc['cin'] ?? '') ?>"></div>
+                <div><label>مالك</label><input type="text" name="owner_name" value="<?= htmlspecialchars($doc['owner_name'] ?? $case['proprietaire'] ?? '') ?>"></div>
+                <div><label>مستغلة من</label><select id="exploite_by" name="exploite_by"><option value="">--</option><option value="oui" <?= (($doc['exploite_by'] ?? '') === 'oui') ? 'selected' : '' ?>>نعم</option><option value="non" <?= (($doc['exploite_by'] ?? '') === 'non') ? 'selected' : '' ?>>لا</option></select></div>
+                <div id="occupiedWrap"><label>المشغول</label><input type="text" name="occupied_by" value="<?= htmlspecialchars($doc['occupied_by'] ?? '') ?>"></div>
+                <div><label>درجة التأكيد</label><input type="text" name="confirmation_degree" value="<?= htmlspecialchars($doc['confirmation_degree'] ?? '') ?>"></div>
+                <div><label>المكان</label><select name="address_id"><option value="">-- اختر عنوانا --</option><?php foreach($addresses as $a): ?><option value="<?= $a['id'] ?>" <?= ((int)($doc['address_id'] ?? 0) === (int)$a['id']) ? 'selected' : '' ?>><?= htmlspecialchars($a['libelle']) ?></option><?php endforeach; ?></select></div>
+                <div><label>حالة المحضر</label><select name="pv_state_id"><option value="">--</option><?php foreach($pvStates as $s): ?><option value="<?= $s['id'] ?>" <?= ((int)($doc['pv_state_id'] ?? 0) === (int)$s['id']) ? 'selected' : '' ?>><?= htmlspecialchars($s['libelle']) ?></option><?php endforeach; ?></select></div>
+                <div><label><input type="checkbox" name="forward_to_ministry" value="1" <?= !empty($doc['forward_to_ministry']) ? 'checked' : '' ?>> توجيه وزارة التجهيز (اختياري)</label></div>
             <?php endif; ?>
+
+            <?php if ($type === 'step3_expert_request'): ?>
+                <div><label>ID bureau d'ordre</label><input type="text" name="subject" value="<?= htmlspecialchars($doc['subject'] ?? $case['bureau_ordre_id']) ?>"></div>
+                <div><label>الموضوع</label><input type="text" name="administration" value="<?= htmlspecialchars($doc['administration'] ?? '') ?>"></div>
+                <div><label>اتجاه</label><select name="direction_io"><option value="sader" <?= (($doc['direction_io'] ?? '') === 'sader') ? 'selected' : '' ?>>صادر</option><option value="wared" <?= (($doc['direction_io'] ?? '') === 'wared') ? 'selected' : '' ?>>وارد</option></select></div>
+                <div><label>تسمية الخبير بعد رجوع المحكمة</label><input type="text" name="expert_name" value="<?= htmlspecialchars($doc['expert_name'] ?? '') ?>"></div>
+            <?php endif; ?>
+
+            <?php if ($type === 'step4_expert_report'): ?>
+                <div><label>نوع التقرير</label><select name="report_type"><option value="initial" <?= (($doc['report_type'] ?? '') === 'initial') ? 'selected' : '' ?>>تقرير اختيار اولي</option><option value="final" <?= (($doc['report_type'] ?? '') === 'final') ? 'selected' : '' ?>>تقرير اختبار نهائي</option></select></div>
+                <div><label><input type="checkbox" name="heritage_needed" value="1" <?= !empty($doc['heritage_needed']) ? 'checked' : '' ?>> المرور على إدارة التراث (اختياري)</label></div>
+                <div><label>اتجاه التراث</label><select name="heritage_direction"><option value="">--</option><option value="sader" <?= (($doc['heritage_direction'] ?? '') === 'sader') ? 'selected' : '' ?>>صادر</option><option value="wared" <?= (($doc['heritage_direction'] ?? '') === 'wared') ? 'selected' : '' ?>>وارد</option></select></div>
+                <div><label>موعد التوجه</label><input type="date" name="appointment_date" value="<?= htmlspecialchars($doc['appointment_date'] ?? '') ?>"></div>
+            <?php endif; ?>
+
+            <?php if ($type === 'step5_decision'): ?>
+                <div class="full"><label>القرار النهائي</label><select name="decision_type"><option value="evacuation" <?= (($doc['decision_type'] ?? '') === 'evacuation') ? 'selected' : '' ?>>قرار إخلاء</option><option value="demolition" <?= (($doc['decision_type'] ?? '') === 'demolition') ? 'selected' : '' ?>>قرار هدم</option></select></div>
+            <?php endif; ?>
+
+            <div class="full"><label>ملاحظات</label><textarea name="observations"><?= htmlspecialchars($doc['observations'] ?? '') ?></textarea></div>
+            <div class="full"><label>ملف مرفق</label><input type="file" name="attachment"><?php if (!empty($doc['attachment_path'])): ?><div style="margin-top:5px"><a target="_blank" href="<?= htmlspecialchars($doc['attachment_path']) ?>">📎 الملف الحالي</a></div><?php endif; ?></div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn b1" type="submit" onclick="this.form.statut.value='brouillon'">💾 حفظ مسودة</button>
+            <button class="btn b2" type="submit" onclick="this.form.statut.value='finalise'">✅ حفظ نهائي</button>
+            <?php if (($doc['statut'] ?? '') === 'finalise'): ?><a class="btn b3" target="_blank" href="document.php?id=<?= $id ?>&type=<?= $type ?>&print=1">🖨️ طباعة</a><?php endif; ?>
+        </div>
+    </form>
+
+    <?php if (in_array($type, ['step3_expert_request','step4_expert_report'], true)): ?>
+    <div class="card">
+        <h4>مراسلة (صادر / وارد)</h4>
+        <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="add_correspondence" value="1">
+            <div class="grid">
+                <div><label>ID bureau d'ordre</label><input name="corr_bureau" value="<?= htmlspecialchars($case['bureau_ordre_id']) ?>"></div>
+                <div><label>الموضوع</label><input name="corr_subject"></div>
+                <div><label>الإدارة</label><input name="corr_admin"></div>
+                <div><label>الاتجاه</label><select name="corr_direction"><option value="sader">صادر</option><option value="wared">وارد</option></select></div>
+                <div class="full"><label>مرفق</label><input type="file" name="corr_attachment"></div>
+            </div>
+            <div style="margin-top:10px"><button class="btn b3" type="submit">➕ إضافة مراسلة</button></div>
+        </form>
+        <hr style="margin:14px 0;border:none;border-top:1px solid #eee">
+        <?php if (!$corr): ?><div style="color:#888">لا توجد مراسلات.</div><?php endif; ?>
+        <?php foreach ($corr as $c): ?>
+            <div style="padding:8px;border:1px solid #eee;border-radius:8px;margin-bottom:8px">
+                <b><?= htmlspecialchars($c['bureau_ordre_id']) ?></b> — <?= htmlspecialchars($c['subject']) ?> — <?= htmlspecialchars($c['administration']) ?>
+                <span class="<?= $c['direction_io'] === 'wared' ? 'io-wared' : 'io-sader' ?>"><?= $c['direction_io'] === 'wared' ? 'وارد' : 'صادر' ?></span>
+                <?php if (!empty($c['attachment_path'])): ?> <a target="_blank" href="<?= htmlspecialchars($c['attachment_path']) ?>">📎</a><?php endif; ?>
+            </div>
         <?php endforeach; ?>
     </div>
-
-    <!-- Messages -->
-    <?php if (isset($_GET['err']) && $_GET['err'] === 'notfinal'): ?>
-        <div class="alert alert-warning">
-            ⚠️ لا يمكن الطباعة — يجب حفظ الوثيقة كـ <strong>نهائية</strong> أولاً
-        </div>
     <?php endif; ?>
-    <?php if ($msg === 'finalise'): ?>
-        <div class="alert alert-success">
-            ✅ تم الحفظ كنهائي — يمكنك الآن الطباعة 🖨️
-        </div>
-    <?php elseif ($msg === 'brouillon'): ?>
-        <div class="alert alert-warning">
-            ✏️ تم الحفظ كمسودة — الطباعة غير متاحة حتى تحفظ كنهائي
-        </div>
-    <?php endif; ?>
-
-    <form method="POST" id="docForm">
-        <input type="hidden" name="statut" id="statut-hidden"
-               value="<?= htmlspecialchars($v['statut']) ?>">
-
-        <!-- ── بيانات الوثيقة ── -->
-        <div class="card">
-            <div class="card-title">📌 بيانات الوثيقة</div>
-            <div class="grid">
-                <div class="fg">
-                    <label>🔢 رقم الوثيقة / العدد</label>
-                    <input type="text" name="numero_doc"
-                           placeholder="مثال: 531/615"
-                           value="<?= htmlspecialchars($v['numero_doc']) ?>">
-                </div>
-                <div class="fg">
-                    <label>📅 تاريخ الوثيقة</label>
-                    <input type="date" name="date_doc"
-                           value="<?= htmlspecialchars($v['date_doc']) ?>">
-                </div>
-                <div class="fg">
-                    <label>📋 الحالة</label>
-                    <div class="statut-wrap">
-                        <select name="statut_select" id="statut-select"
-                                onchange="document.getElementById('statut-hidden').value=this.value;
-                                          updateBadge(this.value)">
-                            <option value="brouillon"
-                                <?= $v['statut']==='brouillon' ? 'selected' : '' ?>>
-                                ✏️ مسودة
-                            </option>
-                            <option value="finalise"
-                                <?= $v['statut']==='finalise' ? 'selected' : '' ?>>
-                                ✅ نهائي
-                            </option>
-                        </select>
-                        <span class="statut-badge <?= $v['statut']==='finalise' ? 's-finalise' : 's-brouillon' ?>"
-                              id="statut-badge">
-                            <?= $v['statut']==='finalise' ? '✅ نهائي' : '✏️ مسودة' ?>
-                        </span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ── بيانات البناية ── -->
-        <div class="card">
-            <div class="card-title">🏚️ بيانات البناية</div>
-            <div class="grid">
-
-                <div class="sec-sep full">
-                    <span>📍 تعريف البناية</span><hr>
-                </div>
-
-                <div class="fg">
-                    <label>🔢 عدد المحضر</label>
-                    <input type="text" name="numero_rapport"
-                           class="field-auto"
-                           value="<?= htmlspecialchars($v['numero_rapport']) ?>">
-                    <div class="auto-hint">🔄 مُعبَّأ تلقائياً</div>
-                </div>
-                <div class="fg">
-                    <label>📅 تاريخ المعاينة</label>
-                    <input type="date" name="date_rapport"
-                           class="field-auto"
-                           value="<?= htmlspecialchars($v['date_rapport']) ?>">
-                    <div class="auto-hint">🔄 مُعبَّأ تلقائياً</div>
-                </div>
-                <div class="fg full">
-                    <label>📍 مكان البناية</label>
-                    <input type="text" name="lieu"
-                           class="field-auto"
-                           value="<?= htmlspecialchars($v['lieu']) ?>">
-                    <div class="auto-hint">🔄 مُعبَّأ تلقائياً — يمكن تعديله</div>
-                </div>
-                <div class="fg full">
-                    <label>👤 المالك / المشغول</label>
-                    <input type="text" name="proprietaire"
-                           class="field-auto"
-                           value="<?= htmlspecialchars($v['proprietaire']) ?>">
-                    <div class="auto-hint">🔄 مُعبَّأ تلقائياً — يمكن تعديله</div>
-                </div>
-
-                <div class="sec-sep full">
-                    <span>🏗️ وصف البناية</span><hr>
-                </div>
-                <div class="fg full">
-                    <label>📝 وصف البناية ومكوناتها</label>
-                    <textarea name="description_batiment"
-                              placeholder="مثال: تتكوّن البناية من طابق أرضي وطابق علوي..."
-                    ><?= htmlspecialchars($v['description_batiment']) ?></textarea>
-                </div>
-
-                <?php if (in_array($type, ['demolition','courrier_expert','izn_tribunal'])): ?>
-                <div class="sec-sep full">
-                    <span>🔬 بيانات الخبير</span><hr>
-                </div>
-                <div class="fg">
-                    <label>👨‍💼 اسم الخبير العدلي</label>
-                    <input type="text" name="nom_expert"
-                           placeholder="الاسم الكامل للخبير"
-                           value="<?= htmlspecialchars($v['nom_expert']) ?>">
-                </div>
-                <div class="fg">
-                    <label>📅 تاريخ تقرير الخبير</label>
-                    <input type="date" name="date_expert"
-                           value="<?= htmlspecialchars($v['date_expert']) ?>">
-                </div>
-                <?php endif; ?>
-
-                <?php if ($type === 'izn_tribunal'): ?>
-                <div class="sec-sep full">
-                    <span>⚖️ بيانات المحكمة</span><hr>
-                </div>
-                <div class="fg">
-                    <label>👨‍⚖️ اسم القاضي / الوكيل الأول</label>
-                    <input type="text" name="nom_juge"
-                           placeholder="الوكيل الأول لرئيس المحكمة"
-                           value="<?= htmlspecialchars($v['nom_juge']) ?>">
-                </div>
-                <div class="fg">
-                    <label>📅 تاريخ الإذن</label>
-                    <input type="date" name="date_izn_tribunal"
-                           value="<?= htmlspecialchars($v['date_izn_tribunal']) ?>">
-                </div>
-                <?php endif; ?>
-
-                <div class="sec-sep full">
-                    <span>📄 تفاصيل القرار / المراسلة</span><hr>
-                </div>
-                <div class="fg full">
-                    <label>✍️ المحتوى التفصيلي</label>
-                    <textarea name="contenu_specifique"
-                              style="min-height:110px"
-                              placeholder="أدخل تفاصيل القرار أو المراسلة..."
-                    ><?= htmlspecialchars($v['contenu_specifique']) ?></textarea>
-                </div>
-                <div class="fg full">
-                    <label>📎 ملاحظات إضافية</label>
-                    <textarea name="observations"
-                              placeholder="ملاحظات..."
-                    ><?= htmlspecialchars($v['observations']) ?></textarea>
-                </div>
-
-            </div>
-        </div>
-
-        <!-- ── Aperçu ── -->
-        <div class="card">
-            <div class="card-title">👁️ معاينة الوثيقة</div>
-            <button type="button"
-                    style="background:#17a2b8;color:white;padding:8px 16px;
-                           border:none;border-radius:7px;cursor:pointer;
-                           font-size:13px;font-family:inherit;font-weight:600;
-                           margin-bottom:10px"
-                    onclick="togglePreview()">
-                👁️ عرض / إخفاء المعاينة
-            </button>
-            <div class="preview-card" id="preview-box">
-                <div class="preview-content" id="preview-content"></div>
-            </div>
-        </div>
-
-        <!-- ── Actions ── -->
-        <div class="btn-row">
-            <!-- Brouillon -->
-            <button type="button" class="btn btn-draft"
-                    onclick="saveDoc('brouillon')">
-                💾 حفظ كمسودة
-            </button>
-
-            <!-- Final -->
-            <button type="button" class="btn btn-final"
-                    onclick="saveDoc('finalise')">
-                ✅ حفظ كنهائي
-            </button>
-
-            <!-- Impression -->
-            <?php if ($v['statut'] === 'finalise'): ?>
-                <a href="document.php?id=<?= $id ?>&type=<?= $type ?>&print=1"
-                   class="btn btn-print" target="_blank">
-                    🖨️ طباعة / PDF
-                </a>
-            <?php else: ?>
-                <button type="button"
-                        class="btn btn-print-locked"
-                        onclick="showToast()">
-                    🔒 طباعة / PDF
-                </button>
-            <?php endif; ?>
-
-            <a href="modifier.php?id=<?= $id ?>" class="btn btn-back">
-                ↩️ رجوع
-            </a>
-        </div>
-
-    </form>
 </div>
-
-<!-- Toast -->
-<div id="toast">
-    ⚠️ يجب حفظ الوثيقة كـ <strong>نهائية</strong> أولاً للطباعة!
-</div>
-
 <script>
-var introText = <?= json_encode($intro, JSON_UNESCAPED_UNICODE) ?>;
-var docType   = '<?= $type ?>';
-
-function saveDoc(statut) {
-    document.getElementById('statut-hidden').value = statut;
-    document.getElementById('docForm').submit();
-}
-
-function updateBadge(val) {
-    var b = document.getElementById('statut-badge');
-    if (val === 'finalise') {
-        b.textContent = '✅ نهائي';
-        b.className   = 'statut-badge s-finalise';
-    } else {
-        b.textContent = '✏️ مسودة';
-        b.className   = 'statut-badge s-brouillon';
-    }
-    document.getElementById('statut-hidden').value = val;
-}
-
-function gv(name) {
-    var el = document.querySelector('[name="' + name + '"]');
-    return el ? el.value.trim() : '';
-}
-
-function buildPreview() {
-    var nr   = gv('numero_rapport');
-    var dr   = gv('date_rapport');
-    var lieu = gv('lieu');
-    var prop = gv('proprietaire');
-    var exp  = gv('nom_expert');
-    var dex  = gv('date_expert');
-    var juge = gv('nom_juge');
-    var dizn = gv('date_izn_tribunal');
-    var desc = gv('description_batiment');
-    var cont = gv('contenu_specifique');
-    var obs  = gv('observations');
-    var t = '';
-
-    if (docType === 'turat') {
-        t = introText + '\n\n';
-        t += 'البناية الكائنة بـ: ' + lieu + '\n';
-        t += 'المالك: ' + prop + '\n';
-        if (desc) t += '\nوصف البناية:\n' + desc + '\n';
-        if (cont) t += '\n' + cont;
-    } else if (docType === 'izn_tribunal') {
-        t = 'نحن ' + juge + ' الوكيل الأول لرئيس المحكمة الابتدائية بسوسة.\n\n';
-        t += introText + '\n\n';
-        t += 'نأذن للخبير العدلي "' + exp + '" بالقيام بالأعمال المشار إليها.\n';
-        if (cont) t += '\n' + cont + '\n';
-        t += '\nسوسة في ' + dizn + '\nالوكيل الأول: ' + juge;
-    } else if (docType === 'courrier_expert') {
-        t = 'الموضوع: إذن في تكليف مهندس خبير\n\n';
-        t += introText + '\n\n';
-        t += 'البناية الكائنة بـ: ' + lieu + ' (ملك ' + prop + ')\n';
-        if (desc) t += '\nتتكوّن من:\n' + desc + '\n';
-        if (cont) t += '\n' + cont + '\n';
-        t += '\nالخبير المقترح: ' + exp;
-    } else if (docType === 'evacuation') {
-        t = introText + '\n\n';
-        t += 'الفصل الأول: يتم الشروع الفوري في الإخلاء\n';
-        if (cont) t += cont + '\n';
-        t += '\nالكائن بـ: ' + lieu;
-        t += '\nعلى حساب: ' + prop;
-        t += '\n\nالفصل الثاني: الكاتب العام مكلف بالتنفيذ.';
-    } else if (docType === 'demolition') {
-        t = introText + '\n';
-        t += 'محضر عدد ' + nr + ' بتاريخ ' + dr + '\n';
-        t += 'تقرير الخبير ' + exp + ' بتاريخ ' + dex + '\n\n';
-        t += 'الفصل الأول: الشروع الفوري في الهدم\n';
-        if (desc) t += desc + '\n';
-        if (cont) t += cont + '\n';
-        t += '\nالعقار الكائن بـ: ' + lieu;
-        t += '\nعلى حساب: ' + prop;
-    }
-    if (obs) t += '\n\nملاحظات: ' + obs;
-    return t;
-}
-
-function togglePreview() {
-    var box = document.getElementById('preview-box');
-    if (box.classList.contains('show')) {
-        box.classList.remove('show');
-    } else {
-        document.getElementById('preview-content').textContent = buildPreview();
-        box.classList.add('show');
-    }
-}
-
-function showToast() {
-    var t = document.getElementById('toast');
-    t.style.display = 'block';
-    setTimeout(function() { t.style.display = 'none'; }, 3500);
-}
+function toggleOccupied(){var s=document.getElementById('exploite_by');var w=document.getElementById('occupiedWrap');if(!s||!w)return;w.style.display=(s.value==='oui')?'block':'none';}
+document.addEventListener('DOMContentLoaded',function(){var s=document.getElementById('exploite_by');if(s){s.addEventListener('change',toggleOccupied);toggleOccupied();}});
 </script>
-
 </body>
 </html>

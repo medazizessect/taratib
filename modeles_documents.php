@@ -4,15 +4,15 @@ ini_set('display_errors', 0);
 require 'db.php';
 
 $types = [
-    'evacuation'      => ['📋 قرار إخلاء فوري',      '#c0392b'],
-    'demolition'      => ['🏚️ قرار هدم',             '#e67e22'],
-    'courrier_expert' => ['📨 مراسلة تكليف خبير',    '#2e6da4'],
-    'izn_tribunal'    => ['⚖️ إذن خبير المحكمة',     '#6f42c1'],
+    'step2_pv'             => ['📋 محضر',                    '#f39c12'],
+    'step3_expert_request' => ['⚖️ تكليف خبير',             '#f39c12'],
+    'step4_expert_report'  => ['🧪 رجوع تقرير الخبير',      '#f39c12'],
+    'step5_decision'       => ['✅ قرار إخلاء أو هدم',      '#28a745'],
 ];
 
 $msg  = '';
-$type = $_GET['type'] ?? 'evacuation';
-if (!isset($types[$type])) $type = 'evacuation';
+$type = $_GET['type'] ?? 'step2_pv';
+if (!isset($types[$type])) $type = 'step2_pv';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pdo->prepare("UPDATE modeles_documents SET contenu = :c WHERE type = :t")
