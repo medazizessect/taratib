@@ -3,90 +3,114 @@ $membresActifs = $pdo->query(
     "SELECT * FROM membres WHERE actif = 1 ORDER BY ordre ASC"
 )->fetchAll(PDO::FETCH_ASSOC);
 
-$currentCommission = $commissionValue ?? '';
-$selectedMembres   = [];
-if (trim($currentCommission) !== '') {
+$currentCommission = trim($commissionValue ?? '');
+$rows = [];
+if ($currentCommission !== '') {
     $parts = preg_split('/\s*\/\s*/u', $currentCommission);
     foreach ($parts as $p) {
         $p = trim($p);
-        if ($p !== '') $selectedMembres[] = $p;
+        if ($p === '') continue;
+        if (mb_strpos($p, ':') !== false) {
+            [$n, $g] = array_pad(array_map('trim', explode(':', $p, 2)), 2, '');
+            $rows[] = ['nom' => $n, 'grade' => $g];
+        } else {
+            $rows[] = ['nom' => $p, 'grade' => ''];
+        }
     }
 }
 ?>
 <div class="commission-wrap">
-    <div class="tags-box" id="tags-box" onclick="focusTagInput()">
-        <div id="tags-container"></div>
-        <input type="text" class="tag-input" id="tag-input"
-               placeholder="اكتب اسماً وأضغط Enter..."
-               autocomplete="off">
-    </div>
-    <div class="membres-predefs" id="membres-predefs">
-        <?php foreach ($membresActifs as $m): ?>
+    <div class="membres-predefs">
+        <?php foreach ($membresActifs as $m):
+            $label = trim($m['nom'] . (!empty($m['grade']) ? ' : ' . $m['grade'] : ''));
+        ?>
             <button type="button" class="predef-btn"
-                    data-nom="<?= htmlspecialchars($m['nom'],ENT_QUOTES) ?>"
-                    onclick="toggleMembre(this)">
-                <?= htmlspecialchars($m['nom']) ?>
+                    data-nom="<?= htmlspecialchars($m['nom'], ENT_QUOTES) ?>"
+                    data-grade="<?= htmlspecialchars($m['grade'] ?? '', ENT_QUOTES) ?>"
+                    onclick="addPredefinedMember(this)">
+                <?= htmlspecialchars($label) ?>
             </button>
         <?php endforeach; ?>
     </div>
+
+    <div id="commission-rows"></div>
+
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="predef-btn" onclick="addCommissionRow('', '')">➕ إضافة عضو</button>
+    </div>
+
     <p class="commission-hint">
-        💡 انقر على الأسماء لإضافتها أو إزالتها —
-        أو اكتب اسماً يدوياً واضغط <kbd>Enter</kbd>
+        ✍️ أضف أعضاء اللجنة مع الرتبة/الصفة — يمكن التعديل أو الحذف مباشرة.
     </p>
     <input type="hidden" name="commission" id="commission-hidden"
-           value="<?= htmlspecialchars($currentCommission,ENT_QUOTES) ?>">
+           value="<?= htmlspecialchars($currentCommission, ENT_QUOTES) ?>">
 </div>
 <script>
 (function(){
-    var predefNames = <?= json_encode(array_column($membresActifs,'nom'),JSON_UNESCAPED_UNICODE) ?>;
-    var initial     = <?= json_encode($selectedMembres,JSON_UNESCAPED_UNICODE) ?>;
-    var selected    = initial.slice();
-    render(); syncBtns();
-    function render(){
-        var c=document.getElementById('tags-container');
-        c.innerHTML='';
-        selected.forEach(function(nom,i){
-            var isP=predefNames.indexOf(nom)!==-1;
-            var tag=document.createElement('span');
-            tag.className='tag '+(isP?'tag-predef':'tag-custom');
-            tag.innerHTML='<span class="tag-label">'+esc(nom)+'</span>'+
-                '<button type="button" class="tag-remove" '+
-                'onclick="removeTag('+i+')" title="إزالة">×</button>';
-            c.appendChild(tag);
-        });
-        syncHidden();
-    }
-    function syncBtns(){
-        document.querySelectorAll('.predef-btn').forEach(function(btn){
-            btn.classList.toggle('selected',selected.indexOf(btn.getAttribute('data-nom'))!==-1);
-        });
-    }
-    function syncHidden(){
-        document.getElementById('commission-hidden').value=selected.join(' / ');
-    }
-    window.toggleMembre=function(btn){
-        var nom=btn.getAttribute('data-nom');
-        var idx=selected.indexOf(nom);
-        if(idx===-1) selected.push(nom); else selected.splice(idx,1);
-        render(); syncBtns();
+    var rows = <?= json_encode($rows, JSON_UNESCAPED_UNICODE) ?>;
+    var box  = document.getElementById('commission-rows');
+    var hidden = document.getElementById('commission-hidden');
+
+    window.addCommissionRow = function(nom, grade) {
+        rows.push({nom: nom || '', grade: grade || ''});
+        render();
     };
-    window.removeTag=function(idx){
-        selected.splice(idx,1); render(); syncBtns();
+
+    window.addPredefinedMember = function(btn) {
+        var nom = btn.getAttribute('data-nom') || '';
+        var grade = btn.getAttribute('data-grade') || '';
+        rows.push({nom: nom, grade: grade});
+        render();
     };
-    var inp=document.getElementById('tag-input');
-    inp.addEventListener('keydown',function(e){
-        if(e.key==='Enter'&&this.value.trim()){
-            e.preventDefault();
-            var nom=this.value.trim();
-            if(selected.indexOf(nom)===-1) selected.push(nom);
-            this.value=''; render(); syncBtns();
-        }
-        if(e.key==='Backspace'&&this.value===''&&selected.length){
-            selected.pop(); render(); syncBtns();
-        }
-    });
-    window.focusTagInput=function(){document.getElementById('tag-input').focus();};
-    function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')
-                              .replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+    window.removeCommissionRow = function(idx) {
+        rows.splice(idx, 1);
+        render();
+    };
+
+    window.updateCommissionRow = function(idx, key, val) {
+        if (!rows[idx]) return;
+        rows[idx][key] = val;
+        sync();
+    };
+
+    function sync() {
+        hidden.value = rows
+            .map(function(r){
+                var n = (r.nom || '').trim();
+                var g = (r.grade || '').trim();
+                if (!n) return '';
+                return g ? (n + ' : ' + g) : n;
+            })
+            .filter(Boolean)
+            .join(' / ');
+    }
+
+    function esc(s) {
+        return String(s || '')
+            .replace(/&/g,'&amp;')
+            .replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;')
+            .replace(/"/g,'&quot;');
+    }
+
+    function render() {
+        box.innerHTML = '';
+        rows.forEach(function(r, i){
+            var row = document.createElement('div');
+            row.className = 'commission-row';
+            row.innerHTML =
+                '<input type="text" class="commission-input" placeholder="اسم العضو" value="'+esc(r.nom)+'" ' +
+                    'oninput="updateCommissionRow('+i+',\\'nom\\',this.value)">' +
+                '<input type="text" class="commission-input" placeholder="الرتبة / الصفة" value="'+esc(r.grade)+'" ' +
+                    'oninput="updateCommissionRow('+i+',\\'grade\\',this.value)">' +
+                '<button type="button" class="commission-remove" onclick="removeCommissionRow('+i+')">✖</button>';
+            box.appendChild(row);
+        });
+        sync();
+    }
+
+    if (!rows.length) rows.push({nom:'', grade:''});
+    render();
 })();
 </script>

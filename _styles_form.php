@@ -116,6 +116,23 @@ textarea{resize:vertical;min-height:80px;line-height:1.7}
 .membres-predefs{
     display:flex;flex-wrap:wrap;gap:7px;margin-top:11px;
 }
+.commission-row{
+    display:grid;grid-template-columns:1fr 1fr auto;
+    gap:8px;margin-top:10px;align-items:center;
+}
+.commission-input{
+    padding:8px 10px;border:2px solid #e9ecef;border-radius:8px;
+    font-size:13px;font-family:inherit;background:#fff;
+}
+.commission-input:focus{
+    outline:none;border-color:#2e6da4;
+    box-shadow:0 0 0 3px rgba(46,109,164,.12);
+}
+.commission-remove{
+    border:none;background:#dc3545;color:#fff;
+    border-radius:8px;padding:8px 10px;cursor:pointer;
+    font-size:13px;font-weight:700;
+}
 .predef-btn{
     padding:5px 14px;border-radius:20px;border:2px solid #2e6da4;
     background:white;color:#2e6da4;font-size:13px;

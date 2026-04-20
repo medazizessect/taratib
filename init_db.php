@@ -15,6 +15,7 @@ try {
     $pdo->exec("USE batiments_ruine");
 
     $pdo->exec("DROP TABLE IF EXISTS documents_officiels");
+    $pdo->exec("DROP TABLE IF EXISTS adresses");
     $pdo->exec("DROP TABLE IF EXISTS batiments");
     $pdo->exec("DROP TABLE IF EXISTS membres");
     $pdo->exec("DROP TABLE IF EXISTS modeles_documents");
@@ -28,6 +29,15 @@ try {
             proprietaire          TEXT,
             mise_a_jour           VARCHAR(100),
             notification          VARCHAR(100),
+            bureau_ordre_num      VARCHAR(50),
+            bureau_ordre_date     DATE NULL,
+            heure_rapport         VARCHAR(10),
+            cin                   VARCHAR(30),
+            occupant              TEXT,
+            degre_confirmation    VARCHAR(100),
+            constat_details       LONGTEXT,
+            mesures_urgentes      LONGTEXT,
+            adresse_id            INT NULL,
             date_rapport          DATE NULL,
             exploite_oui          TINYINT(1) DEFAULT 0,
             exploite_non          TINYINT(1) DEFAULT 0,
@@ -40,7 +50,17 @@ try {
             decision_evacuation   TEXT,
             decision_demolition   TEXT,
             observations          TEXT,
-            created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_adresse_id (adresse_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
+    ");
+
+    // ── Table adresses ──
+    $pdo->exec("
+        CREATE TABLE adresses (
+            id         INT AUTO_INCREMENT PRIMARY KEY,
+            libelle    VARCHAR(255) NOT NULL UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
     ");
 
@@ -85,16 +105,62 @@ try {
         CREATE TABLE membres (
             id         INT AUTO_INCREMENT PRIMARY KEY,
             nom        VARCHAR(150) NOT NULL,
+            grade      VARCHAR(150) DEFAULT NULL,
             actif      TINYINT(1) DEFAULT 1,
             ordre      INT DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
     ");
     $pdo->exec("
-        INSERT INTO membres (nom, ordre) VALUES
-        ('سنية',1),('هيفاء',2),('محمد كاري',3),
-        ('محمد إسماعيل',4),('رضا مصباح',5),('غازي عبودة',6)
+        INSERT INTO membres (nom, grade, ordre) VALUES
+        ('سنية','مهندسة',1),('هيفاء','مهندسة',2),('محمد كاري','ممثل البلدية',3),
+        ('محمد إسماعيل','ممثل البلدية',4),('رضا مصباح','ممثل التجهيز',5),('غازي عبودة','ممثل التراث',6)
     ");
+
+    // ── Seed adresses depuis Excel ──
+    $xlsxPath = __DIR__ . '/VOIE_Nom_Rues_Arabe_2026.xlsx';
+    if (file_exists($xlsxPath) && class_exists('ZipArchive')) {
+        $zip = new ZipArchive();
+        if ($zip->open($xlsxPath) === true) {
+            $shared = [];
+            $sharedXml = $zip->getFromName('xl/sharedStrings.xml');
+            if ($sharedXml) {
+                $sd = new DOMDocument();
+                if (@$sd->loadXML($sharedXml, LIBXML_PARSEHUGE | LIBXML_NOERROR | LIBXML_NOWARNING)) {
+                    $sx = new DOMXPath($sd);
+                    $sx->registerNamespace('a', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
+                    foreach ($sx->query('//a:si') as $si) {
+                        $v = '';
+                        foreach ($sx->query('.//a:t', $si) as $t) $v .= $t->nodeValue;
+                        $shared[] = trim($v);
+                    }
+                }
+            }
+
+            $sheetXml = $zip->getFromName('xl/worksheets/sheet.xml');
+            if ($sheetXml) {
+                $wd = new DOMDocument();
+                if (@$wd->loadXML($sheetXml, LIBXML_PARSEHUGE | LIBXML_NOERROR | LIBXML_NOWARNING)) {
+                    $ws = new DOMXPath($wd);
+                    $ws->registerNamespace('a', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
+                    $insAdr = $pdo->prepare("INSERT IGNORE INTO adresses (libelle) VALUES (?)");
+                    foreach ($ws->query('//a:sheetData/a:row/a:c[starts-with(@r,"E")]') as $c) {
+                            $vNode = $ws->query('./a:v', $c)->item(0);
+                            if (!$vNode) continue;
+                            $raw = trim($vNode->nodeValue);
+                            if ($raw === '') continue;
+                            $t = $c->attributes->getNamedItem('t');
+                            $val = (($t && $t->nodeValue === 's') && ctype_digit($raw))
+                                ? ($shared[(int)$raw] ?? '')
+                                : $raw;
+                            $val = trim($val);
+                            if ($val !== '') $insAdr->execute([$val]);
+                    }
+                }
+            }
+            $zip->close();
+        }
+    }
 
     // ── Table modeles_documents ──
     $pdo->exec("

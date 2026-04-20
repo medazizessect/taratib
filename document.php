@@ -23,6 +23,10 @@ if (!$id || !array_key_exists($type, $types_info)) {
     header("Location: index.php");
     exit;
 }
+if (!canAccessStep($type)) {
+    header("Location: index.php");
+    exit;
+}
 
 // Charger le bâtiment
 $stmtB = $pdo->prepare("SELECT * FROM batiments WHERE id = ?");
@@ -59,7 +63,7 @@ foreach ($stmtAllDocs->fetchAll(PDO::FETCH_ASSOC) as $d) {
 $msg = '';
 
 // ── Sauvegarde ──
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && hasRole('agent')) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && userCan('can_add')) {
     $statut = in_array($_POST['statut'] ?? '', ['brouillon','finalise'])
               ? $_POST['statut'] : 'brouillon';
 
