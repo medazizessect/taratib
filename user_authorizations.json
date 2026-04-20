@@ -1,0 +1,42 @@
+{
+    "admin": {
+        "step1_reclamation": true,
+        "step2_pv": true,
+        "step3_court": true,
+        "step4_expert": true,
+        "step5_decision": true,
+        "export_tables": true,
+        "manage_grades": true,
+        "manage_permissions": true
+    },
+    "sonia": {
+        "step1_reclamation": true,
+        "step2_pv": true,
+        "step3_court": true,
+        "step4_expert": true,
+        "step5_decision": true,
+        "export_tables": true,
+        "manage_grades": false,
+        "manage_permissions": false
+    },
+    "haifa": {
+        "step1_reclamation": true,
+        "step2_pv": true,
+        "step3_court": true,
+        "step4_expert": true,
+        "step5_decision": true,
+        "export_tables": true,
+        "manage_grades": false,
+        "manage_permissions": false
+    },
+    "karim": {
+        "step1_reclamation": true,
+        "step2_pv": false,
+        "step3_court": false,
+        "step4_expert": false,
+        "step5_decision": false,
+        "export_tables": true,
+        "manage_grades": false,
+        "manage_permissions": false
+    }
+}
