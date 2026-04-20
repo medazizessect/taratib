@@ -76,7 +76,7 @@ foreach ($xp->query('//w:r[w:rPr/w:highlight[@w:val="yellow"]]') as $r) {
     ];
 }
 
-if (count($runs) < 96) die('Template mapping mismatch');
+if (count($runs) < 96) die('Expected 96 highlighted runs in template, found ' . count($runs));
 
 $commission = trim((string)($b['commission'] ?? ''));
 $members = $commission !== '' ? preg_split('/\s*\/\s*/u', $commission) : [];
@@ -120,9 +120,10 @@ foreach ($ranges as $r) {
 
 $newXml = $dom->saveXML();
 
-$tmpFile = tempnam(sys_get_temp_dir(), 'pv_');
-@unlink($tmpFile);
-$tmpFile .= '.docx';
+$tmpFile = sys_get_temp_dir() . '/proces_verbal_' . bin2hex(random_bytes(8)) . '.docx';
+register_shutdown_function(function() use ($tmpFile) {
+    if (file_exists($tmpFile)) unlink($tmpFile);
+});
 
 $in = new ZipArchive();
 $out = new ZipArchive();
@@ -140,11 +141,10 @@ for ($i = 0; $i < $in->numFiles; $i++) {
 $in->close();
 $out->close();
 
-$filename = 'pv_' . preg_replace('/[^\w\-]+/u', '_', (string)$b['numero_rapport']) . '.docx';
+$filename = 'proces_verbal_' . preg_replace('/[^\w\-]+/u', '_', (string)$b['numero_rapport']) . '.docx';
 header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
 header('Content-Disposition: attachment; filename="' . $filename . '"');
 header('Content-Length: ' . filesize($tmpFile));
 readfile($tmpFile);
-@unlink($tmpFile);
 exit;
 ?>

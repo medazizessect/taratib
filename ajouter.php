@@ -261,7 +261,14 @@ function syncAdresseLabel(sel) {
     var opt = sel.options[sel.selectedIndex];
     var val = opt ? (opt.getAttribute('data-libelle') || '') : '';
     var lieu = document.querySelector('input[name="lieu"]');
-    if (lieu && val) lieu.value = val;
+    if (!lieu || !val) return;
+    if (lieu.value.trim() !== '' && lieu.value.trim() !== val) {
+        if (!confirm('سيتم تعويض نص المكان الحالي بالعنوان المختار. المتابعة؟')) {
+            sel.selectedIndex = 0;
+            return;
+        }
+    }
+    lieu.value = val;
 }
 </script>
 </body>

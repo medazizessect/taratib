@@ -55,7 +55,10 @@ function loadUserPermissions() {
 
 function saveUserPermissions(array $permissions) {
     $json = json_encode($permissions, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-    return @file_put_contents(USER_PERMISSIONS_FILE, $json, LOCK_EX) !== false;
+    $ok = @file_put_contents(USER_PERMISSIONS_FILE, $json, LOCK_EX);
+    if ($ok === false) return false;
+    if (!chmod(USER_PERMISSIONS_FILE, 0600)) return false;
+    return true;
 }
 
 function getDefaultCapabilitiesByRole($role) {

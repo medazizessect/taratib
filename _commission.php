@@ -86,25 +86,34 @@ if ($currentCommission !== '') {
             .join(' / ');
     }
 
-    function esc(s) {
-        return String(s || '')
-            .replace(/&/g,'&amp;')
-            .replace(/</g,'&lt;')
-            .replace(/>/g,'&gt;')
-            .replace(/"/g,'&quot;');
-    }
-
     function render() {
         box.innerHTML = '';
         rows.forEach(function(r, i){
             var row = document.createElement('div');
             row.className = 'commission-row';
-            row.innerHTML =
-                '<input type="text" class="commission-input" placeholder="اسم العضو" value="'+esc(r.nom)+'" ' +
-                    'oninput="updateCommissionRow('+i+',\\'nom\\',this.value)">' +
-                '<input type="text" class="commission-input" placeholder="الرتبة / الصفة" value="'+esc(r.grade)+'" ' +
-                    'oninput="updateCommissionRow('+i+',\\'grade\\',this.value)">' +
-                '<button type="button" class="commission-remove" onclick="removeCommissionRow('+i+')">✖</button>';
+            var inNom = document.createElement('input');
+            inNom.type = 'text';
+            inNom.className = 'commission-input';
+            inNom.placeholder = 'اسم العضو';
+            inNom.value = r.nom || '';
+            inNom.addEventListener('input', function(){ updateCommissionRow(i, 'nom', this.value); });
+
+            var inGrade = document.createElement('input');
+            inGrade.type = 'text';
+            inGrade.className = 'commission-input';
+            inGrade.placeholder = 'الرتبة / الصفة';
+            inGrade.value = r.grade || '';
+            inGrade.addEventListener('input', function(){ updateCommissionRow(i, 'grade', this.value); });
+
+            var del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'commission-remove';
+            del.textContent = '✖';
+            del.addEventListener('click', function(){ removeCommissionRow(i); });
+
+            row.appendChild(inNom);
+            row.appendChild(inGrade);
+            row.appendChild(del);
             box.appendChild(row);
         });
         sync();

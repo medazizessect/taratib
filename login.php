@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = trim($_POST['password'] ?? '');
 
     $settings = getUserSettings($username);
-    if ($settings && $settings['password'] === $password) {
+    if ($settings && hash_equals((string)$settings['password'], (string)$password)) {
         $_SESSION['user'] = [
             'username' => $username,
             'nom'      => $settings['nom'],

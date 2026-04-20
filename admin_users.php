@@ -7,6 +7,7 @@ $all = loadUserPermissions();
 $msg = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $currentUser = $_SESSION['user']['username'] ?? '';
     foreach (USERS as $username => $u) {
         $role = $_POST['role'][$username] ?? $u['role'];
         if (!in_array($role, ['viewer','agent','admin'], true)) $role = $u['role'];
@@ -21,6 +22,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'step_evacuation'     => isset($_POST['caps']['step_evacuation'][$username]),
             'step_demolition'     => isset($_POST['caps']['step_demolition'][$username]),
         ];
+        if ($username === $currentUser) {
+            $role = 'admin';
+            $caps = array_merge($caps, getDefaultCapabilitiesByRole('admin'));
+        }
         $all[$username] = ['role' => $role, 'capabilities' => $caps];
     }
     if (saveUserPermissions($all)) $msg = 'saved';

@@ -237,7 +237,7 @@ $inactifs = array_filter($membres, fn($m) => !$m['actif']);
                     <button class="btn btn-cancel"
                             id="bcancel-<?= $m['id'] ?>"
                             type="button"
-                            onclick="cancelEdit(<?= $m['id'] ?>, '<?= addslashes(htmlspecialchars($m['nom'])) ?>', '<?= addslashes(htmlspecialchars($m['grade'] ?? '')) ?>')">
+                            onclick='cancelEdit(<?= $m['id'] ?>, <?= json_encode($m["nom"], JSON_UNESCAPED_UNICODE) ?>, <?= json_encode($m["grade"] ?? "", JSON_UNESCAPED_UNICODE) ?>)'>
                         ✖
                     </button>
 
