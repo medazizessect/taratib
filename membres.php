@@ -1,7 +1,13 @@
 <?php
 error_reporting(0);
 ini_set('display_errors', 0);
+require 'config.php';
+requireLogin();
 require 'db.php';
+if (!userCan('can_manage_members')) {
+    header('Location: index.php');
+    exit;
+}
 
 $msg = '';
 
@@ -10,10 +16,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'ajouter') {
         $nom = trim($_POST['nom'] ?? '');
+        $grade = trim($_POST['grade'] ?? '');
         if ($nom !== '') {
             $max = $pdo->query("SELECT COALESCE(MAX(ordre),0) FROM membres")->fetchColumn();
-            $pdo->prepare("INSERT INTO membres (nom, ordre) VALUES (?, ?)")
-                ->execute([$nom, intval($max) + 1]);
+            $pdo->prepare("INSERT INTO membres (nom, grade, ordre) VALUES (?, ?, ?)")
+                ->execute([$nom, ($grade !== '' ? $grade : null), intval($max) + 1]);
             $msg = 'added';
         }
     }
@@ -36,9 +43,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // ✅ Bug corrigé : récupérer correctement nom et id
         $id_m = intval($_POST['id']  ?? 0);
         $nom  = trim($_POST['nom_edit'] ?? '');
+        $grade = trim($_POST['grade_edit'] ?? '');
         if ($id_m && $nom !== '') {
-            $pdo->prepare("UPDATE membres SET nom = ? WHERE id = ?")
-                ->execute([$nom, $id_m]);
+            $pdo->prepare("UPDATE membres SET nom = ?, grade = ? WHERE id = ?")
+                ->execute([$nom, ($grade !== '' ? $grade : null), $id_m]);
             $msg = 'updated';
         }
     }
@@ -150,11 +158,14 @@ $inactifs = array_filter($membres, fn($m) => !$m['actif']);
     <!-- Ajout -->
     <div class="card">
         <div class="card-title">➕ إضافة عضو جديد</div>
-        <form method="POST" class="add-row">
+        <form method="POST" class="add-row" style="flex-wrap:wrap">
             <input type="hidden" name="action" value="ajouter">
             <input type="text" name="nom"
-                   placeholder="اكتب اسم العضو الجديد..."
-                   autocomplete="off" required>
+                    placeholder="اكتب اسم العضو الجديد..."
+                    autocomplete="off" required>
+            <input type="text" name="grade"
+                   placeholder="الرتبة / الصفة (اختياري)"
+                   autocomplete="off">
             <button type="submit" class="btn btn-add">➕ إضافة</button>
         </form>
         <p class="hint">💡 الأعضاء النشطون يظهرون تلقائياً في نماذج إضافة وتعديل المحاضر</p>
@@ -182,6 +193,9 @@ $inactifs = array_filter($membres, fn($m) => !$m['actif']);
                     <span class="nom-display"
                           id="disp-<?= $m['id'] ?>">
                         <?= htmlspecialchars($m['nom']) ?>
+                        <?php if (!empty($m['grade'])): ?>
+                            — <?= htmlspecialchars($m['grade']) ?>
+                        <?php endif; ?>
                     </span>
 
                     <!-- ✅ Input édition avec nom distinct -->
@@ -190,6 +204,11 @@ $inactifs = array_filter($membres, fn($m) => !$m['actif']);
                            id="editinput-<?= $m['id'] ?>"
                            value="<?= htmlspecialchars($m['nom']) ?>"
                            placeholder="الاسم الجديد...">
+                    <input type="text"
+                           class="nom-edit-input"
+                           id="editgrade-<?= $m['id'] ?>"
+                           value="<?= htmlspecialchars($m['grade'] ?? '') ?>"
+                           placeholder="الرتبة / الصفة...">
 
                     <span class="status-badge s-actif">نشط</span>
 
@@ -205,6 +224,7 @@ $inactifs = array_filter($membres, fn($m) => !$m['actif']);
                         <input type="hidden" name="action"   value="modifier">
                         <input type="hidden" name="id"       id="fid-<?= $m['id'] ?>"   value="<?= $m['id'] ?>">
                         <input type="hidden" name="nom_edit" id="fnomhid-<?= $m['id'] ?>" value="">
+                        <input type="hidden" name="grade_edit" id="fgradehid-<?= $m['id'] ?>" value="">
                         <button type="submit"
                                 class="btn btn-save"
                                 id="bsave-<?= $m['id'] ?>"
@@ -217,7 +237,7 @@ $inactifs = array_filter($membres, fn($m) => !$m['actif']);
                     <button class="btn btn-cancel"
                             id="bcancel-<?= $m['id'] ?>"
                             type="button"
-                            onclick="cancelEdit(<?= $m['id'] ?>, '<?= addslashes(htmlspecialchars($m['nom'])) ?>')">
+                            onclick='cancelEdit(<?= $m['id'] ?>, <?= json_encode($m["nom"], JSON_UNESCAPED_UNICODE) ?>, <?= json_encode($m["grade"] ?? "", JSON_UNESCAPED_UNICODE) ?>)'>
                         ✖
                     </button>
 
@@ -250,6 +270,9 @@ $inactifs = array_filter($membres, fn($m) => !$m['actif']);
                 <div class="membre-item inactif">
                     <div class="num"><?= $m['ordre'] ?></div>
                     <span class="nom-display"><?= htmlspecialchars($m['nom']) ?></span>
+                    <?php if (!empty($m['grade'])): ?>
+                    <span class="status-badge s-actif"><?= htmlspecialchars($m['grade']) ?></span>
+                    <?php endif; ?>
                     <span class="status-badge s-inactif">معطل</span>
                     <!-- Toggle réactiver -->
                     <form method="POST" style="display:contents">
@@ -279,6 +302,7 @@ $inactifs = array_filter($membres, fn($m) => !$m['actif']);
 function startEdit(id) {
     document.getElementById('disp-'    + id).style.display = 'none';
     document.getElementById('editinput-' + id).style.display = 'block';
+    document.getElementById('editgrade-' + id).style.display = 'block';
     document.getElementById('bedit-'   + id).style.display = 'none';
     document.getElementById('bsave-'   + id).style.display = 'inline-flex';
     document.getElementById('bcancel-' + id).style.display = 'inline-flex';
@@ -289,19 +313,23 @@ function startEdit(id) {
 // ✅ Préparer la sauvegarde : copier valeur dans le hidden
 function prepareSave(id) {
     var val = document.getElementById('editinput-' + id).value.trim();
+    var grade = document.getElementById('editgrade-' + id).value.trim();
     if (!val) {
         alert('الاسم لا يمكن أن يكون فارغاً');
         return false;
     }
     document.getElementById('fnomhid-' + id).value = val;
+    document.getElementById('fgradehid-' + id).value = grade;
     return true;
 }
 
 // ✅ Annuler l'édition
-function cancelEdit(id, original) {
+function cancelEdit(id, original, originalGrade) {
     document.getElementById('disp-'      + id).style.display = '';
     document.getElementById('editinput-' + id).style.display = 'none';
+    document.getElementById('editgrade-' + id).style.display = 'none';
     document.getElementById('editinput-' + id).value = original;
+    document.getElementById('editgrade-' + id).value = originalGrade || '';
     document.getElementById('bedit-'     + id).style.display = 'inline-flex';
     document.getElementById('bsave-'     + id).style.display = 'none';
     document.getElementById('bcancel-'   + id).style.display = 'none';
@@ -319,7 +347,8 @@ document.querySelectorAll('.nom-edit-input').forEach(function(inp) {
         }
         if (e.key === 'Escape') {
             var id = this.id.replace('editinput-', '');
-            cancelEdit(id, this.defaultValue);
+            var gradeEl = document.getElementById('editgrade-' + id);
+            cancelEdit(id, this.defaultValue, gradeEl ? gradeEl.defaultValue : '');
         }
     });
 });

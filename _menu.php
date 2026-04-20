@@ -4,11 +4,13 @@ $currentPage = basename($_SERVER['PHP_SELF'], '.php');
 
 $menuItems = [
     ['page' => 'index',             'icon' => '🏚️', 'label' => 'البنايات',       'role' => 'viewer'],
-    ['page' => 'ajouter',           'icon' => '➕',  'label' => 'إضافة محضر',    'role' => 'agent'],
-    ['page' => 'membres',           'icon' => '👥',  'label' => 'الأعضاء',        'role' => 'agent'],
-    ['page' => 'modeles_documents', 'icon' => '📝',  'label' => 'نماذج الوثائق', 'role' => 'admin'],
-    ['page' => 'export_excel',      'icon' => '📊',  'label' => 'Excel',          'role' => 'agent'],
-    ['page' => 'export_pdf',        'icon' => '📄',  'label' => 'PDF',            'role' => 'agent'],
+    ['page' => 'ajouter',           'icon' => '➕',  'label' => 'إضافة محضر',    'cap' => 'can_add'],
+    ['page' => 'membres',           'icon' => '👥',  'label' => 'الأعضاء',        'cap' => 'can_manage_members'],
+    ['page' => 'modeles_documents', 'icon' => '📝',  'label' => 'نماذج الوثائق', 'cap' => 'can_manage_models'],
+    ['page' => 'adresses',          'icon' => '📍',  'label' => 'العناوين',       'role' => 'admin'],
+    ['page' => 'admin_users',       'icon' => '🛡️',  'label' => 'صلاحيات المستخدمين', 'role' => 'admin'],
+    ['page' => 'export_excel',      'icon' => '📊',  'label' => 'Excel',          'cap' => 'can_export'],
+    ['page' => 'export_pdf',        'icon' => '📄',  'label' => 'PDF',            'cap' => 'can_export'],
 ];
 ?>
 
@@ -48,7 +50,8 @@ $menuItems = [
     <!-- Nav -->
     <nav class="sb-nav">
         <?php foreach ($menuItems as $item):
-            if (!hasRole($item['role'])) continue;
+            if (isset($item['cap']) && !userCan($item['cap'])) continue;
+            if (isset($item['role']) && !hasRole($item['role'])) continue;
             $active = ($currentPage === $item['page']);
         ?>
         <a href="<?= $item['page'] ?>.php"

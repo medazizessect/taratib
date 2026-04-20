@@ -1,7 +1,13 @@
 <?php
 error_reporting(0);
 ini_set('display_errors', 0);
+require 'config.php';
+requireLogin();
 require 'db.php';
+if (!userCan('can_manage_models')) {
+    header('Location: index.php');
+    exit;
+}
 
 $types = [
     'evacuation'      => ['📋 قرار إخلاء فوري',      '#c0392b'],

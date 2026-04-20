@@ -1,7 +1,13 @@
 <?php
 error_reporting(0);
 ini_set('display_errors', 0);
+require 'config.php';
+requireLogin();
 require 'db.php';
+if (!userCan('can_export')) {
+    header('Location: index.php');
+    exit;
+}
 
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 

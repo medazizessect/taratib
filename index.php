@@ -309,8 +309,10 @@ if (!empty($batiments)) {
     <!-- Toolbar -->
     <div class="toolbar">
         <div class="toolbar-left">
-            <?php if (hasRole('agent')): ?>
+            <?php if (userCan('can_add')): ?>
                 <a href="ajouter.php" class="btn btn-success">➕ إضافة محضر</a>
+            <?php endif; ?>
+            <?php if (userCan('can_export')): ?>
                 <a href="export_excel.php<?= $search!=='' ? '?search='.urlencode($search) : '' ?>"
                    class="btn btn-excel">📊 Excel</a>
                 <a href="export_pdf.php<?= $search!=='' ? '?search='.urlencode($search) : '' ?>"
@@ -474,7 +476,10 @@ if (!empty($batiments)) {
 
                             <!-- Modifier / Supprimer -->
                             <div class="action-top">
-                                <?php if (hasRole('agent')): ?>
+                                <a href="pv_export.php?id=<?= $row['id'] ?>"
+                                   class="ab" style="background:#6f42c1;color:#fff"
+                                   title="تحميل محضر Word">🧾</a>
+                                <?php if (userCan('can_add')): ?>
                                 <a href="modifier.php?id=<?= $row['id'] ?>"
                                    class="ab ab-edit" title="تعديل">✏️</a>
                                 <?php endif; ?>
@@ -490,7 +495,7 @@ if (!empty($batiments)) {
                             <?php foreach (STEPS as $type => $cfg):
                                 $cls    = $stepClasses[$type];
                                 $tip    = $stepTooltips[$type];
-                                $locked = $stepLocked[$type];
+                                $locked = $stepLocked[$type] || !canAccessStep($type);
                                 $isLast = ($type === $lastKey);
                             ?>
 
