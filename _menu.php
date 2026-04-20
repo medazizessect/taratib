@@ -6,9 +6,11 @@ $menuItems = [
     ['page' => 'index',             'icon' => '🏚️', 'label' => 'البنايات',       'role' => 'viewer'],
     ['page' => 'ajouter',           'icon' => '➕',  'label' => 'إضافة محضر',    'role' => 'agent'],
     ['page' => 'membres',           'icon' => '👥',  'label' => 'الأعضاء',        'role' => 'agent'],
+    ['page' => 'grades',            'icon' => '🎖️',  'label' => 'الدرجات',        'role' => 'admin'],
+    ['page' => 'permissions',       'icon' => '🔐',  'label' => 'الصلاحيات',      'role' => 'admin'],
     ['page' => 'modeles_documents', 'icon' => '📝',  'label' => 'نماذج الوثائق', 'role' => 'admin'],
-    ['page' => 'export_excel',      'icon' => '📊',  'label' => 'Excel',          'role' => 'agent'],
-    ['page' => 'export_pdf',        'icon' => '📄',  'label' => 'PDF',            'role' => 'agent'],
+    ['page' => 'export_excel',      'icon' => '📊',  'label' => 'Excel',          'role' => 'viewer'],
+    ['page' => 'export_pdf',        'icon' => '📄',  'label' => 'PDF',            'role' => 'viewer'],
 ];
 ?>
 
@@ -49,6 +51,9 @@ $menuItems = [
     <nav class="sb-nav">
         <?php foreach ($menuItems as $item):
             if (!hasRole($item['role'])) continue;
+            if (in_array($item['page'], ['export_excel','export_pdf']) && !userCan('export_tables')) continue;
+            if ($item['page'] === 'grades' && !userCan('manage_grades')) continue;
+            if ($item['page'] === 'permissions' && !userCan('manage_permissions')) continue;
             $active = ($currentPage === $item['page']);
         ?>
         <a href="<?= $item['page'] ?>.php"

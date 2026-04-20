@@ -308,9 +308,11 @@ if (!empty($batiments)) {
 
     <!-- Toolbar -->
     <div class="toolbar">
-        <div class="toolbar-left">
-            <?php if (hasRole('agent')): ?>
+            <div class="toolbar-left">
+            <?php if (hasRole('agent') && userCan('step2_pv')): ?>
                 <a href="ajouter.php" class="btn btn-success">➕ إضافة محضر</a>
+            <?php endif; ?>
+            <?php if (userCan('export_tables')): ?>
                 <a href="export_excel.php<?= $search!=='' ? '?search='.urlencode($search) : '' ?>"
                    class="btn btn-excel">📊 Excel</a>
                 <a href="export_pdf.php<?= $search!=='' ? '?search='.urlencode($search) : '' ?>"
@@ -474,7 +476,9 @@ if (!empty($batiments)) {
 
                             <!-- Modifier / Supprimer -->
                             <div class="action-top">
-                                <?php if (hasRole('agent')): ?>
+                                <a href="pv_print.php?id=<?= $row['id'] ?>" target="_blank"
+                                   class="ab" style="background:#2e6da4;color:#fff" title="طباعة PV">🖨️</a>
+                                <?php if (hasRole('agent') && userCan('step2_pv')): ?>
                                 <a href="modifier.php?id=<?= $row['id'] ?>"
                                    class="ab ab-edit" title="تعديل">✏️</a>
                                 <?php endif; ?>
@@ -491,6 +495,17 @@ if (!empty($batiments)) {
                                 $cls    = $stepClasses[$type];
                                 $tip    = $stepTooltips[$type];
                                 $locked = $stepLocked[$type];
+                                $permMap = [
+                                    'turat' => 'step1_reclamation',
+                                    'izn_tribunal' => 'step2_pv',
+                                    'courrier_expert' => 'step3_court',
+                                    'evacuation' => 'step4_expert',
+                                    'demolition' => 'step5_decision',
+                                ];
+                                if (!userCan($permMap[$type] ?? 'step1_reclamation')) {
+                                    $locked = true;
+                                    $tip = 'غير مصرح بهذه المرحلة';
+                                }
                                 $isLast = ($type === $lastKey);
                             ?>
 

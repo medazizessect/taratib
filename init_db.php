@@ -17,6 +17,8 @@ try {
     $pdo->exec("DROP TABLE IF EXISTS documents_officiels");
     $pdo->exec("DROP TABLE IF EXISTS batiments");
     $pdo->exec("DROP TABLE IF EXISTS membres");
+    $pdo->exec("DROP TABLE IF EXISTS grades");
+    $pdo->exec("DROP TABLE IF EXISTS addresses");
     $pdo->exec("DROP TABLE IF EXISTS modeles_documents");
 
     // ── Table batiments ──
@@ -29,9 +31,19 @@ try {
             mise_a_jour           VARCHAR(100),
             notification          VARCHAR(100),
             date_rapport          DATE NULL,
+            numero_bureau_ordre   VARCHAR(100),
+            date_bureau_ordre     DATE NULL,
+            notification_region   TEXT,
+            heure_constat         VARCHAR(20),
             exploite_oui          TINYINT(1) DEFAULT 0,
             exploite_non          TINYINT(1) DEFAULT 0,
+            cin                   VARCHAR(50),
+            occupe_par            TEXT,
+            degre_confirmation    VARCHAR(100),
             commission            TEXT,
+            commission_json       LONGTEXT,
+            description_detaillee LONGTEXT,
+            mesures_urgentes      LONGTEXT,
             date_envoi_tratiib    DATE NULL,
             date_envoi_wiz        DATE NULL,
             date_envoi_turat      DATE NULL,
@@ -43,6 +55,58 @@ try {
             created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
     ");
+
+    $pdo->exec("
+        CREATE TABLE grades (
+            id         INT AUTO_INCREMENT PRIMARY KEY,
+            label      VARCHAR(150) NOT NULL UNIQUE,
+            actif      TINYINT(1) DEFAULT 1,
+            ordre      INT DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
+    ");
+    $pdo->exec("
+        INSERT INTO grades (label, ordre) VALUES
+        ('المهندس المدني المعمارية',1),
+        ('ممثل عن بلدية سوسة',2),
+        ('ممثل عن الإدارة الجهوية للتجهيز والإسكان',3),
+        ('ممثل عن المعهد الوطني للتراث بالساحل',4)
+    ");
+
+    $pdo->exec("
+        CREATE TABLE addresses (
+            id         INT AUTO_INCREMENT PRIMARY KEY,
+            libelle    VARCHAR(255) NOT NULL UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
+    ");
+    if (class_exists('ZipArchive') && file_exists(__DIR__ . '/VOIE_Nom_Rues_Arabe_2026.xlsx')) {
+        $zip = new ZipArchive();
+        if ($zip->open(__DIR__ . '/VOIE_Nom_Rues_Arabe_2026.xlsx') === true) {
+            $sheetXml = $zip->getFromName('xl/worksheets/sheet.xml');
+            if ($sheetXml) {
+                $xml = @simplexml_load_string($sheetXml);
+                if ($xml !== false) {
+                    $xml->registerXPathNamespace('x','http://schemas.openxmlformats.org/spreadsheetml/2006/main');
+                    $insAddr = $pdo->prepare("INSERT IGNORE INTO addresses (libelle) VALUES (?)");
+                    $seen = [];
+                    foreach ($xml->xpath('//x:sheetData/x:row') ?: [] as $row) {
+                        foreach ($row->c as $cell) {
+                            $ref = (string)$cell['r'];
+                            if (!preg_match('/^E\\d+$/', $ref)) continue;
+                            $lib = trim((string)$cell->is->t);
+                            if ($lib !== '' && $lib !== 'NomAr' && !isset($seen[$lib])) {
+                                $seen[$lib] = true;
+                                $insAddr->execute([$lib]);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            $zip->close();
+        }
+    }
 
     // ── Table documents_officiels ──
     // Ordre: turat(fac) → izn → courrier → evacuation → demolition

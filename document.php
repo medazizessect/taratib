@@ -12,16 +12,27 @@ $type = trim($_GET['type']   ?? '');
 
 // Types valides
 $types_info = [
-    'turat'           => ['🏺 إجابة التراث',       '#17a2b8'],
-    'izn_tribunal'    => ['⚖️ إذن خبير المحكمة',  '#6f42c1'],
-    'courrier_expert' => ['📨 مراسلة تكليف خبير', '#2e6da4'],
-    'evacuation'      => ['📋 قرار إخلاء فوري',   '#c0392b'],
-    'demolition'      => ['🏚️ قرار هدم',          '#e67e22'],
+    'turat'           => ['1️⃣ Réclamation', '#17a2b8'],
+    'izn_tribunal'    => ['2️⃣ محضر',        '#6f42c1'],
+    'courrier_expert' => ['3️⃣ Court',       '#2e6da4'],
+    'evacuation'      => ['4️⃣ Expert',      '#c0392b'],
+    'demolition'      => ['5️⃣ Decision',    '#e67e22'],
+];
+
+$permMap = [
+    'turat'           => 'step1_reclamation',
+    'izn_tribunal'    => 'step2_pv',
+    'courrier_expert' => 'step3_court',
+    'evacuation'      => 'step4_expert',
+    'demolition'      => 'step5_decision',
 ];
 
 if (!$id || !array_key_exists($type, $types_info)) {
     header("Location: index.php");
     exit;
+}
+if (!userCan($permMap[$type] ?? 'step1_reclamation')) {
+    die("🚫 غير مصرح لك بهذه المرحلة");
 }
 
 // Charger le bâtiment
