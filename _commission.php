@@ -40,27 +40,47 @@ if (empty($rows)) $rows[] = ['nom' => '', 'grade_id' => 0];
     var container = document.getElementById('commission-rows');
     var gradeOptions = <?= json_encode($gradesActifs, JSON_UNESCAPED_UNICODE) ?>;
     var rows = <?= json_encode($rows, JSON_UNESCAPED_UNICODE) ?>;
-    function esc(s){
-        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
-                        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
     function render(){
         container.innerHTML = '';
         rows.forEach(function(r, i){
-            var opts = '<option value="">— الدرجة —</option>';
+            var row = document.createElement('div');
+            row.style.display = 'grid';
+            row.style.gridTemplateColumns = '2fr 2fr auto';
+            row.style.gap = '8px';
+
+            var nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.setAttribute('list', 'membres-list');
+            nameInput.placeholder = 'اسم العضو';
+            nameInput.value = String(r.nom || '');
+            nameInput.setAttribute('data-i', String(i));
+            nameInput.setAttribute('data-k', 'nom');
+
+            var select = document.createElement('select');
+            select.setAttribute('data-i', String(i));
+            select.setAttribute('data-k', 'grade_id');
+            var firstOption = document.createElement('option');
+            firstOption.value = '';
+            firstOption.textContent = '— الدرجة —';
+            select.appendChild(firstOption);
             gradeOptions.forEach(function(g){
-                var sel = Number(r.grade_id) === Number(g.id) ? ' selected' : '';
-                opts += '<option value="'+g.id+'"'+sel+'>'+esc(g.label)+'</option>';
+                var op = document.createElement('option');
+                op.value = String(g.id);
+                op.textContent = String(g.label || '');
+                if (Number(r.grade_id) === Number(g.id)) op.selected = true;
+                select.appendChild(op);
             });
-            var html = ''
-                + '<div style="display:grid;grid-template-columns:2fr 2fr auto;gap:8px">'
-                +   '<input type="text" list="membres-list" placeholder="اسم العضو" value="'+esc(r.nom || '')+'" data-i="'+i+'" data-k="nom">'
-                +   '<select data-i="'+i+'" data-k="grade_id">'+opts+'</select>'
-                +   '<button type="button" class="btn btn-cancel" onclick="removeCommissionRow('+i+')">✖</button>'
-                + '</div>';
-            var wrap = document.createElement('div');
-            wrap.innerHTML = html;
-            container.appendChild(wrap);
+
+            var removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'btn btn-cancel';
+            removeBtn.textContent = '✖';
+            removeBtn.addEventListener('click', function(){ window.removeCommissionRow(i); });
+
+            row.appendChild(nameInput);
+            row.appendChild(select);
+            row.appendChild(removeBtn);
+            container.appendChild(row);
         });
         container.querySelectorAll('input[data-k],select[data-k]').forEach(function(el){
             el.addEventListener('input', function(){
