@@ -5,43 +5,43 @@
  */
 
 define('STEPS', [
-    'turat' => [
-        'icon'     => '🏺',
-        'label'    => 'إجابة التراث',
-        'color'    => '#17a2b8',
+    'step1_reclamation' => [
+        'icon'     => '🧾',
+        'label'    => 'شكاوي',
+        'color'    => '#dc3545',
         'requires' => null,
-        'optional' => true,
+        'optional' => false,
         'step_num' => 1,
     ],
-    'izn_tribunal' => [
-        'icon'     => '⚖️',
-        'label'    => 'إذن المحكمة',
-        'color'    => '#6f42c1',
-        'requires' => null,
+    'step2_pv' => [
+        'icon'     => '📋',
+        'label'    => 'محضر',
+        'color'    => '#f39c12',
+        'requires' => 'step1_reclamation',
         'optional' => false,
         'step_num' => 2,
     ],
-    'courrier_expert' => [
-        'icon'     => '📨',
-        'label'    => 'مراسلة خبير',
-        'color'    => '#2e6da4',
-        'requires' => 'izn_tribunal',
+    'step3_expert_request' => [
+        'icon'     => '⚖️',
+        'label'    => 'تكليف خبير',
+        'color'    => '#f39c12',
+        'requires' => 'step2_pv',
         'optional' => false,
         'step_num' => 3,
     ],
-    'evacuation' => [
-        'icon'     => '📋',
-        'label'    => 'قرار إخلاء',
-        'color'    => '#c0392b',
-        'requires' => 'courrier_expert',
+    'step4_expert_report' => [
+        'icon'     => '🧪',
+        'label'    => 'رجوع التقرير',
+        'color'    => '#f39c12',
+        'requires' => 'step3_expert_request',
         'optional' => false,
         'step_num' => 4,
     ],
-    'demolition' => [
-        'icon'     => '🏚️',
-        'label'    => 'قرار هدم',
-        'color'    => '#e67e22',
-        'requires' => 'evacuation',
+    'step5_decision' => [
+        'icon'     => '✅',
+        'label'    => 'قرار الإخلاء/الهدم',
+        'color'    => '#28a745',
+        'requires' => 'step4_expert_report',
         'optional' => false,
         'step_num' => 5,
     ],
@@ -57,10 +57,9 @@ function getStepClass($type, $docs) {
     $locked  = ($req !== null && !isset($docs[$req]));
     $num     = $cfg['step_num'];
 
-    if ($locked)           return 'step-btn step-locked';
+    if ($locked) return 'step-btn step-locked';
     if ($exists && $isFinal) return "step-btn step-done s{$num} step-final";
-    if ($exists)             return "step-btn step-done s{$num} step-draft";
-    if ($cfg['optional'])    return 'step-btn step-optional';
+    if ($exists) return "step-btn step-done s{$num} step-draft";
     return 'step-btn step-todo';
 }
 
@@ -74,7 +73,6 @@ function getStepTooltip($type, $docs) {
     if ($locked)                return "🔒 يجب إتمام «" . (STEPS[$req]['label'] ?? '') . "» أولاً";
     if ($statut === 'finalise') return "✅ {$cfg['label']} — نهائي";
     if ($statut === 'brouillon')return "✏️ {$cfg['label']} — مسودة";
-    if ($cfg['optional'])       return "🏺 {$cfg['label']} (اختياري)";
     return "➕ إنشاء {$cfg['label']}";
 }
 ?>

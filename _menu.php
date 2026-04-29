@@ -3,12 +3,9 @@ if (!function_exists('isLoggedIn')) require_once 'config.php';
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');
 
 $menuItems = [
-    ['page' => 'index',             'icon' => '🏚️', 'label' => 'البنايات',       'role' => 'viewer'],
-    ['page' => 'ajouter',           'icon' => '➕',  'label' => 'إضافة محضر',    'role' => 'agent'],
-    ['page' => 'membres',           'icon' => '👥',  'label' => 'الأعضاء',        'role' => 'agent'],
-    ['page' => 'modeles_documents', 'icon' => '📝',  'label' => 'نماذج الوثائق', 'role' => 'admin'],
-    ['page' => 'export_excel',      'icon' => '📊',  'label' => 'Excel',          'role' => 'agent'],
-    ['page' => 'export_pdf',        'icon' => '📄',  'label' => 'PDF',            'role' => 'agent'],
+    ['page' => 'index',   'icon' => '📊', 'label' => 'المتابعة',     'roles' => ['admin','haifa','khaoula','mohamed']],
+    ['page' => 'ajouter', 'icon' => '🧾', 'label' => 'إضافة شكاية',  'roles' => ['admin','haifa']],
+    ['page' => 'membres', 'icon' => '⚙️', 'label' => 'الإدارة',      'roles' => ['admin']],
 ];
 ?>
 
@@ -21,7 +18,7 @@ $menuItems = [
 
     <!-- Logo -->
     <div class="sb-logo">
-        <div class="sb-logo-icon">🏛️</div>
+        <img src="Logo_commune_Sousse.svg" alt="Logo commune" class="sb-logo-img">
         <div>
             <div style="font-size:14px;font-weight:700">بلدية سوسة</div>
             <div style="font-size:11px;opacity:.6;margin-top:1px">البنايات المتداعية</div>
@@ -39,7 +36,7 @@ $menuItems = [
             <div style="font-size:11px;opacity:.6;margin-top:1px">
                 <?php
                 $r = $_SESSION['user']['role'] ?? '';
-                echo $r==='admin' ? '🔴 مدير' : ($r==='agent' ? '🔵 عون' : '⚪ قارئ');
+                echo roleLabel($r);
                 ?>
             </div>
         </div>
@@ -48,7 +45,7 @@ $menuItems = [
     <!-- Nav -->
     <nav class="sb-nav">
         <?php foreach ($menuItems as $item):
-            if (!hasRole($item['role'])) continue;
+            if (!hasAnyRole($item['roles'])) continue;
             $active = ($currentPage === $item['page']);
         ?>
         <a href="<?= $item['page'] ?>.php"
@@ -99,12 +96,10 @@ $menuItems = [
         gap: 10px;
         flex-shrink: 0;
     }
-    .sb-logo-icon {
-        width: 40px; height: 40px; border-radius: 50%;
-        background: rgba(255,255,255,.15);
-        display: flex; align-items: center;
-        justify-content: center; font-size: 20px;
-        flex-shrink: 0;
+    .sb-logo-img {
+        width: 44px; height: 44px;
+        object-fit: contain; flex-shrink: 0;
+        background: white; border-radius: 50%; padding: 3px;
     }
 
     .sb-user {
