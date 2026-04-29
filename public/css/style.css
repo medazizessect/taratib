@@ -1,0 +1,17 @@
+:root {
+    --taratib-red: #DC3545;
+    --taratib-orange: #FFC107;
+    --taratib-green: #28A745;
+}
+
+body { direction: rtl; background: #f8f9fa; }
+.logo-header { max-height: 56px; width: auto; }
+.badge-etape-rouge { background-color: var(--taratib-red); }
+.badge-etape-orange { background-color: var(--taratib-orange); color: #212529; }
+.badge-etape-vert { background-color: var(--taratib-green); }
+.bg-etape-rouge { background: rgba(220,53,69,.15); }
+.bg-etape-orange { background: rgba(255,193,7,.18); }
+.bg-etape-vert { background: rgba(40,167,69,.15); }
+.required::after { content: ' *'; color: #dc3545; }
+.field-highlight { background: #fff8cc; }
+.sidebar { min-height: calc(100vh - 72px); }

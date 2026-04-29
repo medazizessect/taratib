@@ -1,0 +1,2 @@
+<h1 class="h4 mb-3">Détail توجيه</h1>
+<?php if (!$item): ?><div class="alert alert-warning">Introuvable.</div><?php else: ?><div class="card card-body"><p><strong>Sujet:</strong> <?= htmlspecialchars($item['sujet']) ?></p><p><strong>Type:</strong> <?= htmlspecialchars($item['type']) ?></p><p><strong>Désignation expert:</strong> <?= htmlspecialchars($item['designation_expert']) ?></p></div><?php endif; ?>
